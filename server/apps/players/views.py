@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 
-from players.serializers import PlayerSerializer
+from apps.players.serializers import PlayerSerializer
 
 
 class PlayerMeView(APIView):

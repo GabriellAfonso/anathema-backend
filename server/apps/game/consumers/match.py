@@ -1,6 +1,6 @@
 from .base import BaseConsumer
 from django.contrib.auth import get_user_model
-from game.match.manager import MatchManager
+from apps.game.match.manager import MatchManager
 import json
 from urllib.parse import parse_qs
 
@@ -22,10 +22,7 @@ class MatchConsumer(BaseConsumer):
         # Registra esse consumer para enviar updates futuros
         MatchManager.register_consumer(self.player.id, self)
 
-        # await self.send(text_data=json.dumps({
-        #     "type": "match_start",
-        #     "state": self.match.get_state_for_player(self.player.id)
-        # }))
+        await self.send_event(type='match_start', payload={})
 
     async def get_match_id(self):
         query_string = self.scope["query_string"].decode()

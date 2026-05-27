@@ -2,8 +2,8 @@ from django.contrib import admin
 
 # Register your models here.
 from django.contrib import admin
-from players.models.player import PlayerProfile, PlayerStats, LoginHistory
-from players.models.settings import PlayerSettings
+from apps.players.models.player import PlayerProfile, PlayerStats, LoginHistory
+from apps.players.models.settings import PlayerSettings
 
 
 # Register your models here.

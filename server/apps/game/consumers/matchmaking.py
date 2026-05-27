@@ -1,9 +1,9 @@
 from .base import BaseConsumer
 from django.core.cache import cache
 import uuid
-from players.services.player_queries import get_player_public_data
+from apps.players.services.player_queries import get_player_public_data
 
-from game.match.manager import MatchManager
+from apps.game.match.manager import MatchManager
 
 MATCHMAKING_QUEUE_KEY = "matchmaking_queue"
 

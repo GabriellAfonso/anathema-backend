@@ -1,5 +1,5 @@
 from channels.db import database_sync_to_async
-from players.models.player import PlayerProfile
+from apps.players.models.player import PlayerProfile
 
 
 @database_sync_to_async
