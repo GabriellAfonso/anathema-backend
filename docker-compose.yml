@@ -14,7 +14,7 @@ services:
   anathema_redis:
     container_name: anathema_redis
     restart: unless-stopped
-    image: redis:8.0
+    image: redis:8.6.3-alpine
     ports:
       - 6379:6379
     command: [ "redis-server", "--save", "" ]

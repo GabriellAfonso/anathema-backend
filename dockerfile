@@ -1,5 +1,5 @@
-FROM python:3.12
-LABEL maintainer="gabrieldelimaafonso@gmail.com"
+FROM python:3.14.5-alpine3.22
+LABEL maintainer="gabriellafonso.dev@gmail.com"
 
 ENV PYTHONDONTWRITEBYTECODE 1
 
