@@ -1,10 +1,11 @@
 # Stack
 - Python 3.14 / Django 5.2 LTS
-- Django REST Framework 3.17
+- Django REST Framework 3.18
 - Simple JWT 5.5.1
-- Django Channels 4.3 + Daphne 4.2
+- Django Channels 4.3 + Uvicorn 0.52 (standard)
 - channels_redis 4.3 / Redis 8.6
-- mypy 2.0 + django-stubs 6.0
+- mypy 2.3 + django-stubs 6.1
+- pytest 9.1 + pytest-django 4.14 / pytest-asyncio 1.4 / pytest-cov 7.1
 - Docker: python:3.14-alpine3.22 / redis:8.6-alpine
 
 
