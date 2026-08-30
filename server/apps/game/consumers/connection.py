@@ -1,30 +1,24 @@
 from .base import BaseConsumer
-from django.core.cache import cache
 
 
 class ConnectionConsumer(BaseConsumer):
+    group_prefix = "connection"
     location = "global"
 
-    async def connect(self):
-        await super().connect()
-
+    async def on_connect(self) -> None:
         await self.channel_layer.group_add(
             "online_players",
             self.channel_name,
         )
-        # adiciona channel_name ao cache
 
         # await self.set_heartbeat()
         await self.send_event(type='Evento de teste', payload={})
 
-    async def disconnect(self, code):
+    async def on_disconnect(self, code: int) -> None:
         await self.channel_layer.group_discard(
             "online_players",
             self.channel_name,
         )
-        cache.delete(f"user_channel:{self.user.id}")
-
-        await super().disconnect(code)
 
     # ---------- Handlers ----------
 
