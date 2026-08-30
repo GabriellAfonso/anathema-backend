@@ -3,6 +3,9 @@ djangorestframework==3.18.0
 djangorestframework_simplejwt==5.5.1
 channels==4.3.2
 channels_redis==4.3.0
+# Pulled in by channels_redis, but now a direct dependency: it backs the
+# Django cache and the matchmaking queue.
+redis==8.1.0
 uvicorn[standard]==0.52.4
 django-stubs==6.1.0
 mypy==2.3.1

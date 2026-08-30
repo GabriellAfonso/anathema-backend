@@ -1,4 +1,3 @@
-# type: ignore
 from pathlib import Path
 
 
@@ -68,14 +67,33 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 ASGI_APPLICATION = 'core.asgi.application'
 
+REDIS_URL = "redis://anathema_redis:6379"
+
+# One Redis instance, four logical databases, so that clearing one concern
+# never touches another -- notably, cache.clear() issues FLUSHDB.
+REDIS_CHANNEL_LAYER_DB = 0
+REDIS_CACHE_DB = 1
+REDIS_MATCHMAKING_DB = 2
+REDIS_MATCH_DB = 3
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": f"{REDIS_URL}/{REDIS_CACHE_DB}",
+    },
+}
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("anathema_redis", 6379)],
+            "hosts": [f"{REDIS_URL}/{REDIS_CHANNEL_LAYER_DB}"],
         },
     },
 }
+
+MATCHMAKING_REDIS_URL = f"{REDIS_URL}/{REDIS_MATCHMAKING_DB}"
+MATCH_REDIS_URL = f"{REDIS_URL}/{REDIS_MATCH_DB}"
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
