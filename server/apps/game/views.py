@@ -1,9 +1,7 @@
-from django.shortcuts import render
-from django.http import HttpResponse
-# Create your views here.
+from django.http import HttpRequest, HttpResponse
 
 
-def websocket_test_view(request):
+def websocket_test_view(request: HttpRequest) -> HttpResponse:
     html = """
     <!DOCTYPE html>
     <html>
