@@ -71,7 +71,6 @@ venv.bak/
 
 # IDE - VS Code
 .vscode/*
-!.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
@@ -94,3 +93,6 @@ sftp-config.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Local HTTP scratch files: they carry real bearer tokens
+teste.rest
