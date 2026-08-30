@@ -1,11 +1,14 @@
-# type: ignore
 from django.contrib.auth.models import User
 from django.db import models
 
 
 class PlayerProfile(models.Model):
+    # PK is the User id (vault decision 0001: one profile per user, forever).
+    # Makes profile.pk == user.id by construction, so the websocket layer
+    # cannot mix the two id spaces.
     user = models.OneToOneField(
-        User, on_delete=models.CASCADE, related_name='profile')
+        User, on_delete=models.CASCADE, related_name='profile',
+        primary_key=True)
     nickname = models.CharField(max_length=50, unique=True)
     icon = models.CharField(max_length=255, default='default_icon')
     level = models.IntegerField(default=1)
@@ -30,7 +33,7 @@ class PlayerStats(models.Model):
         verbose_name = "Player Stat"
         verbose_name_plural = "Player Stats"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.profile.nickname} Stats"
 
 
@@ -47,7 +50,7 @@ class LoginHistory(models.Model):
         verbose_name = "Login History"
         verbose_name_plural = "Login Histories"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.user.username} - {self.login_time}"
 
 
@@ -66,5 +69,5 @@ class LoginHistory(models.Model):
 #     class Meta:
 #         unique_together = ('profile', 'friend')  # evita duplicatas
 
-#     def __str__(self):
+#     def __str__(self) -> str:
 #         return f"{self.profile.nickname} -> {self.friend.nickname} ({self.status})"
