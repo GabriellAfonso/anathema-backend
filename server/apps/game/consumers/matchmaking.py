@@ -1,72 +1,69 @@
-from .base import BaseConsumer
-from django.core.cache import cache
-import uuid
-from apps.players.services.player_queries import get_player_public_data
+from apps.game.match.client import get_match_store
+from apps.game.match.models import Match
+from apps.game.match.store import MatchStore
+from apps.game.matchmaking.client import get_matchmaking_queue
+from apps.game.matchmaking.queue import MatchmakingQueue
+from apps.players.services.player_queries import PlayerData, get_player_public_data
 
-from apps.game.match.manager import MatchManager
-
-MATCHMAKING_QUEUE_KEY = "matchmaking_queue"
+from .base import BaseConsumer, ClientEventMessage
 
 
 class MatchmakingConsumer(BaseConsumer):
+    group_prefix = "matchmaking"
 
-    async def connect(self):
-        await super().connect()
+    def __init__(
+        self,
+        *args: object,
+        queue: MatchmakingQueue | None = None,
+        matches: MatchStore | None = None,
+        **kwargs: object,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        # Channels passes as_asgi(**initkwargs) through to __init__, so tests
+        # wire both with MatchmakingConsumer.as_asgi(queue=..., matches=...).
+        self.queue = queue or get_matchmaking_queue()
+        self.matches = matches or get_match_store()
+
+    async def on_connect(self) -> None:
         await self.join_queue()
 
-    async def disconnect(self, code):
-        await self.leave_queue()
-        await super().disconnect(code)
+    async def on_disconnect(self, code: int) -> None:
+        await self.queue.leave(self.user_id)
 
-    async def join_queue(self):
-        """Adiciona o jogador à fila e tenta criar um match"""
-        queue = cache.get(MATCHMAKING_QUEUE_KEY, [])
-        queue.append(self.user.id)
-        cache.set(MATCHMAKING_QUEUE_KEY, queue, timeout=None)
+    async def join_queue(self) -> None:
+        """Entra na fila; cria a partida se esse join fechou um par."""
+        pair = await self.queue.join(self.user_id)
 
-        # se houver pelo menos 2 jogadores, cria um match
-        if len(queue) >= 2:
-            player1 = await get_player_public_data(queue.pop(0))
-            player2 = await get_player_public_data(queue.pop(0))
-            cache.set(MATCHMAKING_QUEUE_KEY, queue, timeout=None)
+        if not pair:
+            return
 
-            match = MatchManager.create_match(player1, player2)
+        player1 = await get_player_public_data(pair[0])
+        player2 = await get_player_public_data(pair[1])
 
-            # Envia evento para os dois jogadores conectarem ao MatchConsumer
-            channel_1 = cache.get(f"user_channel:{player1["id"]}")
-            channel_2 = cache.get(f"user_channel:{player2["id"]}")
-
-            await self.channel_layer.send(
-                channel_1,
-                {
-                    "type": "client_event",
-                    "event": "match_found",
-                    "payload": {
-                        "self": player1,
-                        "opponent": player2,
-                        "match_id": match.id,
-                    }
-                }
+        if player1 is None or player2 is None:
+            await self.send_error(
+                "matchmaking_failed",
+                f"no profile for one of the paired users {pair}",
             )
-            await self.channel_layer.send(
-                channel_2,
-                {
-                    "type": "client_event",
-                    "event": "match_found",
-                    "payload": {
-                        "self": player2,
-                        "opponent": player1,
-                        "match_id": match.id,
-                    }
-                }
-            )
+            return
 
-    async def handle_match_found():
-        print('partida achada kk')
+        match = await self.matches.create(player1, player2)
 
-    async def leave_queue(self):
-        """Remove o jogador da fila caso desconecte antes de parear"""
-        queue = cache.get(MATCHMAKING_QUEUE_KEY, [])
-        if self.user.id in queue:
-            queue.remove(self.user.id)
-            cache.set(MATCHMAKING_QUEUE_KEY, queue, timeout=None)
+        await self.announce_match(match, player1, player2)
+        await self.announce_match(match, player2, player1)
+
+    async def announce_match(
+        self, match: Match, player: PlayerData, opponent: PlayerData
+    ) -> None:
+        """Avisa um jogador do pareamento, do ponto de vista dele."""
+        message: ClientEventMessage = {
+            "type": "client_event",
+            "event": "match_found",
+            "payload": {
+                "self": player,
+                "opponent": opponent,
+                "match_id": match.match_id,
+            },
+        }
+
+        await self.channel_layer.group_send(self.user_group(player["user_id"]), message)
