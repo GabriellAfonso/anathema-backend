@@ -9,6 +9,24 @@
 - Docker: python:3.14-alpine3.22 / redis:8.6-alpine
 
 
+# Project knowledge base
+
+Design and product decisions live in the Obsidian vault, not in this repo:
+
+    C:/Users/gabri/Obsidian/Projetos/Anathema/
+
+Read `Decisões/` before writing domain code. If the code disagrees with a
+decision note, the code is wrong. `Backend/` holds per-app design notes.
+Notes are in Brazilian Portuguese; keep that, and keep them short.
+Write a new decision note only when asked.
+
+Decisions in force:
+- One profile per user, permanent. `PlayerProfile.user` is the PK, so
+  `profile.pk == user.id`.
+- `User.id` is the identity across the websocket and match layers.
+- Never expose a bare `id` field. Name the id space: `user_id`, `profile_id`.
+
+
 ## Code style
 
 - Functions: 4-20 lines. Split if longer.
