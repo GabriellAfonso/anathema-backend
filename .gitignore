@@ -96,3 +96,6 @@ Thumbs.db
 
 # Local HTTP scratch files: they carry real bearer tokens
 teste.rest
+
+# Claude Code
+.claude/
