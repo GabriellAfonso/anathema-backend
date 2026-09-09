@@ -1,5 +1,27 @@
 <!--
-Sync Impact Report
+Sync Impact Report — 1.1.0 (2026-09-09)
+- Version change: 1.0.0 → 1.1.0
+- Bump rationale: MINOR. `black` passa a constar na lista de tecnologias
+  fixadas, e uma regra estrutural nova separa dependências de execução das de
+  desenvolvimento. Nenhum princípio foi removido nem redefinido.
+- Modified sections:
+  * Technology And Structure Constraints — acrescentado `black 26.5.1` à stack
+    fixada; acrescentada a regra de separação `requirements.txt` /
+    `requirements-dev.txt`; a linha sobre formatação passou a apontar para a
+    dependência fixada.
+- Added sections: none.
+- Removed sections: none.
+- Motivo da emenda: `black` já era citado nas portas de qualidade desde 1.0.0,
+  mas nunca esteve instalado nem fixado — a porta era regra escrita que ninguém
+  cumpria. Ao instalar, a governança exige registrar aqui antes do bump.
+- Templates requiring updates:
+  ✅ CLAUDE.md — lista de stack atualizada com `black 26.5.1` para não divergir.
+  ✅ .specify/templates/*.md — nenhum referencia a lista de dependências.
+- Follow-up TODOs: none.
+-->
+
+<!--
+Sync Impact Report — 1.0.0
 - Version change: (uninitialized template) → 1.0.0
 - Bump rationale: first ratification; every placeholder replaced with concrete
   project rules derived from CLAUDE.md and the Obsidian decision notes.
@@ -110,7 +132,21 @@ constitution:
 - channels_redis 4.3 / Redis 8.6
 - mypy 2.3 + django-stubs 6.1
 - pytest 9.1 + pytest-django 4.14 / pytest-asyncio 1.4 / pytest-cov 7.1
+- black 26.5.1
 - Docker images: `python:3.14-alpine3.22` / `redis:8.6-alpine`
+
+Dependências são declaradas em dois arquivos, e a separação é obrigatória:
+
+- `server/requirements.txt` — só o que roda em produção. É o que a imagem
+  Docker instala por padrão.
+- `server/requirements-dev.txt` — teste, tipagem e formatação. Começa com
+  `-r requirements.txt`, então instalar o de desenvolvimento traz tudo. O
+  dockerfile só o instala com `--build-arg INSTALL_DEV=true`, que o compose de
+  desenvolvimento passa.
+
+Uma ferramenta que não é executada por código de produção MUST NOT entrar em
+`requirements.txt`. Formatador, runner de teste e checador de tipo na imagem de
+produção são peso morto e superfície de ataque sem contrapartida.
 
 Structural rules:
 
@@ -122,8 +158,10 @@ Structural rules:
 - Third-party libraries MUST be wrapped behind a thin interface owned by this
   project (the `match/store.py`, `matchmaking/queue.py` shape), so the library
   never leaks into domain code.
-- Formatting is delegated to `black`. Style beyond the formatter's output is
-  not a review topic.
+- Formatting is delegated to `black`, na versão fixada acima. Style beyond the
+  formatter's output is not a review topic. `black --check server/` limpo é a
+  condição; divergência de formatação é erro da ferramenta não ter rodado, não
+  assunto de revisão.
 - Logging is structured JSON for debugging and observability; plain text only
   for user-facing CLI output.
 
@@ -176,4 +214,4 @@ Compliance:
 - `CLAUDE.md` remains the runtime development guidance for coding agents; the
   Obsidian vault remains the source of truth for domain decisions.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-03 | **Last Amended**: 2026-09-03
+**Version**: 1.1.0 | **Ratified**: 2026-09-03 | **Last Amended**: 2026-09-09

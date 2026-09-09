@@ -6,7 +6,13 @@
 - channels_redis 4.3 / Redis 8.6
 - mypy 2.3 + django-stubs 6.1
 - pytest 9.1 + pytest-django 4.14 / pytest-asyncio 1.4 / pytest-cov 7.1
+- black 26.5.1
 - Docker: python:3.14-alpine3.22 / redis:8.6-alpine
+
+Dependências em dois arquivos: `server/requirements.txt` só o que roda em
+produção, `server/requirements-dev.txt` teste/tipagem/formatação. O dockerfile
+só instala o segundo com `--build-arg INSTALL_DEV=true`, que o compose de dev
+passa.
 
 
 # Project knowledge base
@@ -83,5 +89,6 @@ Decisions in force:
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
+shell commands, and other important information, read the current plan:
+`specs/001-card-catalog/plan.md`
 <!-- SPECKIT END -->
