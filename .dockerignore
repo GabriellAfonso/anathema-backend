@@ -1,0 +1,42 @@
+# O build context é a raiz do repositório (docker-compose.yml: context: .) mas o
+# dockerfile só copia `server/`. Sem esta lista, o venv local e o histórico do
+# git viajam para o daemon a cada build, de graça.
+
+# Ambientes virtuais locais
+venv/
+.venv/
+wsl_venv/
+env/
+ENV/
+
+# Git e metadados
+.git/
+.gitignore
+.dockerignore
+
+# Bytecode e caches de ferramenta
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Banco de desenvolvimento e mídia local
+server/db.sqlite3
+media/
+
+# Documentos de processo: não entram na imagem
+specs/
+.specify/
+.claude/
+CLAUDE.md
+
+# Scratch com token real
+teste.rest
+
+# IDE e SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
