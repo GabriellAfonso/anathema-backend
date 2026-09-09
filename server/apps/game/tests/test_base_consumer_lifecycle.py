@@ -9,7 +9,7 @@ with `RuntimeError: Unexpected ASGI message 'websocket.send', after sending
 import pytest
 from channels.layers import get_channel_layer
 
-from apps.game.consumers.base import BaseConsumer
+from apps.game.consumers.base import UNAUTHENTICATED, BaseConsumer
 from apps.game.tests.fake_users import FakeAnonymousUser, FakePlayerUser
 from apps.game.tests.websocket_test_client import WebsocketTestClient
 
@@ -64,12 +64,14 @@ async def test_authenticated_socket_runs_on_connect(calls: list[str]) -> None:
 
 
 async def test_unauthenticated_socket_is_rejected_with_4001(calls: list[str]) -> None:
+    """O 4001 chega como frame de close: o gate aceita antes de recusar."""
     client = connect_as(FakeAnonymousUser(), calls)
 
-    connected, code = await client.connect()
+    connected, _ = await client.connect()
+    await client.receive_json_from()
 
-    assert not connected
-    assert code == 4001
+    assert connected
+    assert await client.receive_close_code() == UNAUTHENTICATED
     await client.disconnect()
 
 
@@ -77,10 +79,34 @@ async def test_missing_user_is_rejected(calls: list[str]) -> None:
     """JWTAuthMiddleware always sets a user, but a raw ASGI scope may not."""
     client = WebsocketTestClient(RecordingConsumer.as_asgi(calls=calls), "/ws/test/")
 
-    connected, code = await client.connect()
+    connected, _ = await client.connect()
 
-    assert not connected
-    assert code == 4001
+    assert connected
+    assert await client.receive_json_from() == {
+        "type": "auth_denied",
+        "payload": {"error": "authentication required: no user on the scope"},
+    }
+    assert await client.receive_close_code() == UNAUTHENTICATED
+    await client.disconnect()
+
+
+async def test_auth_denied_arrives_before_the_close(calls: list[str]) -> None:
+    """A ordem é o contrato: motivo primeiro, código depois.
+
+    Se o close vier antes, o cliente volta a ver só 1006 e a recusa perde o
+    motivo -- `receive_json_from` falha no frame de close, então esse teste
+    quebra exatamente nesse caso.
+    """
+    client = connect_as(FakeAnonymousUser(), calls)
+    await client.connect()
+
+    assert await client.receive_json_from() == {
+        "type": "auth_denied",
+        "payload": {
+            "error": "authentication required: FakeAnonymousUser is not authenticated"
+        },
+    }
+    assert await client.receive_close_code() == UNAUTHENTICATED
     await client.disconnect()
 
 
