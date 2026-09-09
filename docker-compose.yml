@@ -4,6 +4,10 @@ services:
     image: anathema:latest
     build:
       context: .
+      args:
+        # Só o compose de dev pede as ferramentas: assim `pytest` e `mypy`
+        # rodam dentro do container sem que a imagem de produção os carregue.
+        INSTALL_DEV: "true"
     # Dev-only override of the image's production CMD.
     command: [ "uvicorn", "core.asgi:application",
                "--host", "0.0.0.0", "--port", "8000",

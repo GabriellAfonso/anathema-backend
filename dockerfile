@@ -5,6 +5,12 @@ ENV PYTHONDONTWRITEBYTECODE 1
 
 ENV PYTHONUNBUFFERED 1
 
+# Ferramenta de desenvolvimento (pytest, mypy, black) fica fora da imagem por
+# padrão: em produção é peso morto e superfície de ataque a troco de nada.
+# O compose de dev liga com `INSTALL_DEV=true` para poder rodar teste e tipagem
+# dentro do container.
+ARG INSTALL_DEV=false
+
 COPY server /server
 
 WORKDIR /server
@@ -16,6 +22,9 @@ EXPOSE 8000
 RUN python -m venv /venv && \
     /venv/bin/pip install --upgrade pip && \
     /venv/bin/pip install -r /server/requirements.txt && \
+    if [ "$INSTALL_DEV" = "true" ]; then \
+        /venv/bin/pip install -r /server/requirements-dev.txt; \
+    fi && \
     adduser --disabled-password --no-create-home duser
 
 ENV PATH="/venv/bin:${PATH}"
