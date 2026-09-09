@@ -6,6 +6,25 @@ from django.contrib.auth.base_user import AbstractBaseUser
 from django.core.cache import cache
 from django.utils import timezone
 
+# Close code do gate de autenticação, no range privado 4000-4999. Os gates de
+# domínio continuam a série a partir dele (MatchConsumer usa 44xx).
+UNAUTHENTICATED = 4001
+
+
+def describe_scope_user(user: object) -> str:
+    """Motivo da recusa em texto estável -- o cliente Unity casa com ele.
+
+    Fica fora do repr do usuário de propósito: `repr` carrega o endereço de
+    memória, e o cliente não teria como comparar duas recusas iguais.
+
+    >>> describe_scope_user(None)
+    'no user on the scope'
+    """
+    if not user:
+        return "no user on the scope"
+
+    return f"{type(user).__name__} is not authenticated"
+
 
 class ClientEventMessage(TypedDict):
     """Mensagem de channel layer que vira frame do cliente.
@@ -73,7 +92,7 @@ class BaseConsumer(AsyncJsonWebsocketConsumer):
         user = self.scope.get("user")
 
         if not user or not user.is_authenticated:
-            await self.close(code=4001)
+            await self.deny_unauthenticated(describe_scope_user(user))
             return
 
         self.user = user
@@ -85,6 +104,25 @@ class BaseConsumer(AsyncJsonWebsocketConsumer):
             self.channel_name,
         )
         await self.on_connect()
+
+    async def deny_unauthenticated(self, reason: str) -> None:
+        """Aceita o socket só para contar o motivo, e fecha em seguida.
+
+        Mesmo padrão de `MatchConsumer.reject`: um close antes do handshake
+        chega ao cliente como 1006 (Abnormal), sem código nem texto, então o
+        Unity não distingue token expirado de queda de rede e reconecta com o
+        mesmo access token morto. O access token do SimpleJWT dura 5 minutos,
+        então essa recusa é rotina, não exceção.
+
+        `self.accepted` continua False e `self.user` continua None de
+        propósito: o socket não entrou em grupo nenhum, e é `self.accepted`
+        que impede o `disconnect` de tentar desfazer o que não houve.
+
+        >>> await self.deny_unauthenticated("no user on the scope")
+        """
+        await self.accept()
+        await self.send_error("auth_denied", f"authentication required: {reason}")
+        await self.close(code=UNAUTHENTICATED)
 
     async def on_connect(self) -> None:
         """Subclass hook: accepted socket, `self.user` authenticated.
