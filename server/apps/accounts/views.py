@@ -34,9 +34,13 @@ class LoginView(APIView):
             user.save(update_fields=["last_login"])
 
             refresh = RefreshToken.for_user(user)
-            return Response({
-                "refresh": str(refresh),
-                "token": str(refresh.access_token),
-            })
+            return Response(
+                {
+                    "refresh": str(refresh),
+                    "token": str(refresh.access_token),
+                }
+            )
         else:
-            return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response(
+                {"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED
+            )

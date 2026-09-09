@@ -7,10 +7,10 @@ class PlayerProfile(models.Model):
     # Makes profile.pk == user.id by construction, so the websocket layer
     # cannot mix the two id spaces.
     user = models.OneToOneField(
-        User, on_delete=models.CASCADE, related_name='profile',
-        primary_key=True)
+        User, on_delete=models.CASCADE, related_name="profile", primary_key=True
+    )
     nickname = models.CharField(max_length=50, unique=True)
-    icon = models.CharField(max_length=255, default='default_icon')
+    icon = models.CharField(max_length=255, default="default_icon")
     level = models.IntegerField(default=1)
     experience_points = models.IntegerField(default=0)
     coins = models.IntegerField(default=0)
@@ -23,7 +23,8 @@ class PlayerProfile(models.Model):
 
 class PlayerStats(models.Model):
     profile = models.OneToOneField(
-        'PlayerProfile', on_delete=models.CASCADE, related_name='stats')
+        "PlayerProfile", on_delete=models.CASCADE, related_name="stats"
+    )
     matches_played = models.IntegerField(default=0)
     wins = models.IntegerField(default=0)
     losses = models.IntegerField(default=0)
@@ -40,7 +41,8 @@ class PlayerStats(models.Model):
 class LoginHistory(models.Model):
     # TODO criar sistema pra registrar isso (Provavelmente no websocket)
     user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name='login_history')
+        User, on_delete=models.CASCADE, related_name="login_history"
+    )
     login_time = models.DateTimeField(auto_now_add=True)
     logout_time = models.DateTimeField(null=True, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)

@@ -9,6 +9,7 @@ from django.contrib.auth.base_user import AbstractBaseUser
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed, TokenError
 from asgiref.sync import sync_to_async
+
 User = get_user_model()
 
 # Forma ASGI mínima de que este middleware precisa. Os TypedDict de

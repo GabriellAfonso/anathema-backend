@@ -49,7 +49,7 @@ class MatchConsumer(BaseConsumer):
 
         self.match = match
 
-        await self.send_event(type='match_start', payload={})
+        await self.send_event(type="match_start", payload={})
 
     def get_match_id(self) -> str | None:
         query_string: str = self.scope["query_string"].decode()
@@ -63,5 +63,5 @@ class MatchConsumer(BaseConsumer):
         O close vem depois do accept de propósito: um close antes do handshake
         chega ao browser como 1006, sem código nem texto.
         """
-        await self.send_error('match_denied', reason)
+        await self.send_error("match_denied", reason)
         await self.close(code=code)

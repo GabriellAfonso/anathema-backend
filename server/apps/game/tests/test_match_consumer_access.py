@@ -36,7 +36,9 @@ async def match(matches: FakeMatchStore) -> Match:
     )
 
 
-def connect_as(matches: FakeMatchStore, user_id: int, match_id: str | None) -> WebsocketTestClient:
+def connect_as(
+    matches: FakeMatchStore, user_id: int, match_id: str | None
+) -> WebsocketTestClient:
     query_string = f"matchId={match_id}" if match_id is not None else ""
     client = WebsocketTestClient(
         MatchConsumer.as_asgi(matches=matches), "/ws/match/", query_string=query_string
@@ -45,7 +47,9 @@ def connect_as(matches: FakeMatchStore, user_id: int, match_id: str | None) -> W
     return client
 
 
-async def test_participant_gets_match_start(matches: FakeMatchStore, match: Match) -> None:
+async def test_participant_gets_match_start(
+    matches: FakeMatchStore, match: Match
+) -> None:
     client = connect_as(matches, PLAYER_ONE, match.match_id)
     await client.connect()
 
@@ -64,7 +68,9 @@ async def test_both_players_get_in(matches: FakeMatchStore, match: Match) -> Non
     await client.disconnect()
 
 
-async def test_outsider_is_closed_with_not_a_participant(matches: FakeMatchStore, match: Match) -> None:
+async def test_outsider_is_closed_with_not_a_participant(
+    matches: FakeMatchStore, match: Match
+) -> None:
     client = connect_as(matches, OUTSIDER, match.match_id)
     await client.connect()
 
@@ -97,7 +103,9 @@ async def test_unknown_match_is_closed_with_not_found(matches: FakeMatchStore) -
     await client.disconnect()
 
 
-async def test_missing_match_id_is_closed_with_bad_request(matches: FakeMatchStore) -> None:
+async def test_missing_match_id_is_closed_with_bad_request(
+    matches: FakeMatchStore,
+) -> None:
     client = connect_as(matches, PLAYER_ONE, None)
     await client.connect()
 

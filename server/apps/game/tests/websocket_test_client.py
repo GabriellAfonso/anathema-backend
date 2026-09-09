@@ -27,9 +27,7 @@ class WebsocketTestClient(ApplicationCommunicator):
     >>> accepted, code = await client.connect()
     """
 
-    def __init__(
-        self, application: ASGIApp, path: str, query_string: str = ""
-    ) -> None:
+    def __init__(self, application: ASGIApp, path: str, query_string: str = "") -> None:
         self.scope = {
             "type": "websocket",
             "path": path,
@@ -66,18 +64,18 @@ class WebsocketTestClient(ApplicationCommunicator):
     async def receive_json_from(self, timeout: float = 1) -> dict[str, object]:
         response = await self.receive_output(timeout)
 
-        assert response["type"] == "websocket.send", (
-            f"Expected 'websocket.send', got {response['type']!r}"
-        )
+        assert (
+            response["type"] == "websocket.send"
+        ), f"Expected 'websocket.send', got {response['type']!r}"
         return cast(dict[str, object], json.loads(cast(str, response["text"])))
 
     async def receive_close_code(self, timeout: float = 1) -> int:
         """Close code of a socket the consumer closed after accepting it."""
         response = await self.receive_output(timeout)
 
-        assert response["type"] == "websocket.close", (
-            f"Expected 'websocket.close', got {response['type']!r}"
-        )
+        assert (
+            response["type"] == "websocket.close"
+        ), f"Expected 'websocket.close', got {response['type']!r}"
         return cast(int, response.get("code", 1000))
 
     async def disconnect(self, code: int = 1000, timeout: float = 1) -> None:

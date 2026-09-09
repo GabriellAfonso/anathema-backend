@@ -12,7 +12,7 @@ class ConnectionConsumer(BaseConsumer):
         )
 
         # await self.set_heartbeat()
-        await self.send_event(type='Evento de teste', payload={})
+        await self.send_event(type="Evento de teste", payload={})
 
     async def on_disconnect(self, code: int) -> None:
         await self.channel_layer.group_discard(

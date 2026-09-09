@@ -10,69 +10,123 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('auth', '0012_alter_user_first_name_max_length'),
+        ("auth", "0012_alter_user_first_name_max_length"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='PlayerProfile',
+            name="PlayerProfile",
             fields=[
-                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, primary_key=True, related_name='profile', serialize=False, to=settings.AUTH_USER_MODEL)),
-                ('nickname', models.CharField(max_length=50, unique=True)),
-                ('icon', models.CharField(default='default_icon', max_length=255)),
-                ('level', models.IntegerField(default=1)),
-                ('experience_points', models.IntegerField(default=0)),
-                ('coins', models.IntegerField(default=0)),
-                ('credits', models.IntegerField(default=0)),
+                (
+                    "user",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        primary_key=True,
+                        related_name="profile",
+                        serialize=False,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                ("nickname", models.CharField(max_length=50, unique=True)),
+                ("icon", models.CharField(default="default_icon", max_length=255)),
+                ("level", models.IntegerField(default=1)),
+                ("experience_points", models.IntegerField(default=0)),
+                ("coins", models.IntegerField(default=0)),
+                ("credits", models.IntegerField(default=0)),
             ],
             options={
-                'verbose_name': 'Player Profile',
-                'verbose_name_plural': 'Player Profiles',
+                "verbose_name": "Player Profile",
+                "verbose_name_plural": "Player Profiles",
             },
         ),
         migrations.CreateModel(
-            name='LoginHistory',
+            name="LoginHistory",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('login_time', models.DateTimeField(auto_now_add=True)),
-                ('logout_time', models.DateTimeField(blank=True, null=True)),
-                ('ip_address', models.GenericIPAddressField(blank=True, null=True)),
-                ('user_agent', models.TextField(blank=True)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='login_history', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("login_time", models.DateTimeField(auto_now_add=True)),
+                ("logout_time", models.DateTimeField(blank=True, null=True)),
+                ("ip_address", models.GenericIPAddressField(blank=True, null=True)),
+                ("user_agent", models.TextField(blank=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="login_history",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Login History',
-                'verbose_name_plural': 'Login Histories',
+                "verbose_name": "Login History",
+                "verbose_name_plural": "Login Histories",
             },
         ),
         migrations.CreateModel(
-            name='PlayerSettings',
+            name="PlayerSettings",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('master_volume', models.IntegerField(default=100)),
-                ('music_volume', models.IntegerField(default=80)),
-                ('sfx_volume', models.IntegerField(default=80)),
-                ('resolution_width', models.IntegerField(default=1920)),
-                ('resolution_height', models.IntegerField(default=1080)),
-                ('notifications_enabled', models.BooleanField(default=True)),
-                ('language_preference', models.CharField(default='en', max_length=10)),
-                ('profile', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='settings', to='players.playerprofile')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("master_volume", models.IntegerField(default=100)),
+                ("music_volume", models.IntegerField(default=80)),
+                ("sfx_volume", models.IntegerField(default=80)),
+                ("resolution_width", models.IntegerField(default=1920)),
+                ("resolution_height", models.IntegerField(default=1080)),
+                ("notifications_enabled", models.BooleanField(default=True)),
+                ("language_preference", models.CharField(default="en", max_length=10)),
+                (
+                    "profile",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="settings",
+                        to="players.playerprofile",
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='PlayerStats',
+            name="PlayerStats",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('matches_played', models.IntegerField(default=0)),
-                ('wins', models.IntegerField(default=0)),
-                ('losses', models.IntegerField(default=0)),
-                ('play_time', models.BigIntegerField(default=0)),
-                ('profile', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='stats', to='players.playerprofile')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("matches_played", models.IntegerField(default=0)),
+                ("wins", models.IntegerField(default=0)),
+                ("losses", models.IntegerField(default=0)),
+                ("play_time", models.BigIntegerField(default=0)),
+                (
+                    "profile",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="stats",
+                        to="players.playerprofile",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Player Stat',
-                'verbose_name_plural': 'Player Stats',
+                "verbose_name": "Player Stat",
+                "verbose_name_plural": "Player Stats",
             },
         ),
     ]

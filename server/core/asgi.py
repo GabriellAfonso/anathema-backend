@@ -14,11 +14,11 @@ from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 from core.middlewares.jwt_auth import JWTAuthMiddleware  # noqa: E402
 import apps.game.routing  # noqa: E402
 
-application = ProtocolTypeRouter({
-    "http": django_asgi_app,
-    "websocket": JWTAuthMiddleware(
-        URLRouter(
-            apps.game.routing.websocket_urlpatterns
-        )
-    ),
-})
+application = ProtocolTypeRouter(
+    {
+        "http": django_asgi_app,
+        "websocket": JWTAuthMiddleware(
+            URLRouter(apps.game.routing.websocket_urlpatterns)
+        ),
+    }
+)

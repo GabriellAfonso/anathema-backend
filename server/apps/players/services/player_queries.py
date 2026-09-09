@@ -27,8 +27,7 @@ def get_player_public_data(user_id: int) -> PlayerData | None:
     {'user_id': 7, 'nickname': 'gabriel', 'icon': 'default', 'level': 1}
     """
     return (
-        PlayerProfile.objects
-        .filter(user_id=user_id)
+        PlayerProfile.objects.filter(user_id=user_id)
         .values(
             "user_id",
             "nickname",

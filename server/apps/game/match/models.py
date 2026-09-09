@@ -100,7 +100,11 @@ class Match:
     def play_card(self, player_id: int, card_id: CardId) -> None:
         # lógica simples de exemplo
         self.board_state.setdefault(player_id, []).append(card_id)
-        self.turn = self.players[0]["user_id"] if self.turn == self.players[1]["user_id"] else self.players[1]["user_id"]
+        self.turn = (
+            self.players[0]["user_id"]
+            if self.turn == self.players[1]["user_id"]
+            else self.players[1]["user_id"]
+        )
 
     def get_state_for_player(self, player_id: int) -> PlayerView:
         return {

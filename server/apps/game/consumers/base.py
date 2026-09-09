@@ -70,7 +70,7 @@ class BaseConsumer(AsyncJsonWebsocketConsumer):
         `super().connect()` hit `RuntimeError: Unexpected ASGI message
         'websocket.send', after sending 'websocket.close'.`
         """
-        user = self.scope.get('user')
+        user = self.scope.get("user")
 
         if not user or not user.is_authenticated:
             await self.close(code=4001)
@@ -113,17 +113,15 @@ class BaseConsumer(AsyncJsonWebsocketConsumer):
         >>> await self.channel_layer.group_discard("online_players", self.channel_name)
         """
 
-    async def receive_json(
-        self, content: dict[str, object], **kwargs: object
-    ) -> None:
+    async def receive_json(self, content: dict[str, object], **kwargs: object) -> None:
         """Routes `{"type": "play_card", ...}` to `handle_play_card(payload)`."""
-        msg_type = content.get('type')
-        payload = content.get('payload')
+        msg_type = content.get("type")
+        payload = content.get("payload")
 
         if not msg_type:
             return
 
-        handler = getattr(self, f'handle_{msg_type}', None)
+        handler = getattr(self, f"handle_{msg_type}", None)
         if handler:
             await handler(payload)
 
@@ -135,18 +133,20 @@ class BaseConsumer(AsyncJsonWebsocketConsumer):
         The payload goes out as a nested object, not a JSON string: dumping it
         here made the client parse twice.
         """
-        await self.send_json({
-            'type': type,
-            'payload': payload or {},
-        })
+        await self.send_json(
+            {
+                "type": type,
+                "payload": payload or {},
+            }
+        )
 
     async def send_error(self, type: str, message: str, **extra: object) -> None:
         await self.send_event(
             type=type,
             payload={
-                'error': message,
+                "error": message,
                 **extra,
-            }
+            },
         )
 
     async def client_event(self, event: ClientEventMessage) -> None:
@@ -154,9 +154,9 @@ class BaseConsumer(AsyncJsonWebsocketConsumer):
         await self.send_event(type=event["event"], payload=event.get("payload"))
 
     async def set_heartbeat(self, ttl: int = 30) -> None:
-        self.heartbeat_key = f'presence:user:{self.user_id}'
+        self.heartbeat_key = f"presence:user:{self.user_id}"
         await cache.aset(
             self.heartbeat_key,
-            {'last_seen': timezone.now().isoformat()},
+            {"last_seen": timezone.now().isoformat()},
             timeout=ttl,
         )

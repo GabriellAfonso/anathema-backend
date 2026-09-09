@@ -12,21 +12,23 @@ class RegisterSerializer(ModelSerializer[User]):
 
     email = serializers.EmailField(
         required=True,
-        validators=[UniqueValidator(queryset=User.objects.all(
-        ), message="Este e-mail já está sendo utilizado.")]
+        validators=[
+            UniqueValidator(
+                queryset=User.objects.all(),
+                message="Este e-mail já está sendo utilizado.",
+            )
+        ],
     )
 
     password = serializers.CharField(
-        write_only=True, required=True, validators=[validate_password])
-
-    password_confirmation = serializers.CharField(
-        write_only=True,
-        required=True
+        write_only=True, required=True, validators=[validate_password]
     )
+
+    password_confirmation = serializers.CharField(write_only=True, required=True)
 
     class Meta:
         model = User
-        fields = ('username', 'email', 'password', 'password_confirmation')
+        fields = ("username", "email", "password", "password_confirmation")
 
     def validate_password_confirmation(self, password_confirmation: str) -> str:
         password = self.initial_data.get("password")

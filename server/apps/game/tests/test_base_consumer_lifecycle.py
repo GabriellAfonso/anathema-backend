@@ -37,10 +37,10 @@ def calls() -> list[str]:
     return []
 
 
-def connect_as(user: FakePlayerUser | FakeAnonymousUser, calls: list[str]) -> WebsocketTestClient:
-    client = WebsocketTestClient(
-        RecordingConsumer.as_asgi(calls=calls), "/ws/test/"
-    )
+def connect_as(
+    user: FakePlayerUser | FakeAnonymousUser, calls: list[str]
+) -> WebsocketTestClient:
+    client = WebsocketTestClient(RecordingConsumer.as_asgi(calls=calls), "/ws/test/")
     client.scope["user"] = user
     return client
 
@@ -75,9 +75,7 @@ async def test_unauthenticated_socket_is_rejected_with_4001(calls: list[str]) ->
 
 async def test_missing_user_is_rejected(calls: list[str]) -> None:
     """JWTAuthMiddleware always sets a user, but a raw ASGI scope may not."""
-    client = WebsocketTestClient(
-        RecordingConsumer.as_asgi(calls=calls), "/ws/test/"
-    )
+    client = WebsocketTestClient(RecordingConsumer.as_asgi(calls=calls), "/ws/test/")
 
     connected, code = await client.connect()
 

@@ -63,7 +63,9 @@ async def test_leave_removes_the_player(queue: MatchmakingQueue) -> None:
     assert await queue.join(2) is None
 
 
-async def test_concurrent_joins_pair_everyone_exactly_once(queue: MatchmakingQueue) -> None:
+async def test_concurrent_joins_pair_everyone_exactly_once(
+    queue: MatchmakingQueue,
+) -> None:
     """The race the Lua script exists to close: with a read-modify-write the
     interleaving either drops a player or hands the same player to two
     matches."""
