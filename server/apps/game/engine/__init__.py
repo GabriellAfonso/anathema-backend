@@ -4,8 +4,8 @@
 mesmo que nada ali é regra. Este pacote é o outro lado: aqui se embaralha, se
 compra, se troca carta e se sorteia o dono do token.
 
-Por enquanto só o setup da §3 mora aqui. O Upkeep da §4, a regra geral de
-compra da §9 e o combate da §7 caem no mesmo lugar quando entrarem.
+Moram aqui o setup da §3 e a compra com reset de deck da §9. O Upkeep da §4 e o
+combate da §7 caem no mesmo lugar quando entrarem.
 
 >>> from apps.game.engine import MatchEntry, start_match
 >>> match = start_match(one, two, catalog=catalog, randomness=source, seed=seed)
@@ -16,7 +16,13 @@ compra da §9 e o combate da §7 caem no mesmo lugar quando entrarem.
 `no_implicit_reexport`: sem esta lista, nenhum consumidor importa daqui.
 """
 
-from .card_draw import EmptyDeckError, draw_from_deck_top
+from .card_draw import (
+    MAX_HAND_SIZE,
+    NegativeDrawCountError,
+    draw_card,
+    draw_cards,
+)
+from .deck_reset import reset_deck_from_graveyard
 from .match_setup import (
     InvalidPlayerDeckError,
     MatchEntry,
@@ -30,15 +36,19 @@ from .mulligan import (
 )
 
 __all__ = [
-    # Compra
-    "draw_from_deck_top",
-    "EmptyDeckError",
-    # Setup
+    # Compra (§9)
+    "draw_card",
+    "draw_cards",
+    "MAX_HAND_SIZE",
+    "NegativeDrawCountError",
+    # Reset de deck (§9)
+    "reset_deck_from_graveyard",
+    # Setup (§3)
     "MatchEntry",
     "start_match",
     "finish_setup",
     "InvalidPlayerDeckError",
-    # Mulligan
+    # Mulligan (§3)
     "record_mulligan",
     "MulliganAlreadyTakenError",
     "CardNotInHandError",
