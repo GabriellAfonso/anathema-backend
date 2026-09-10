@@ -26,6 +26,7 @@ from apps.game.randomness import RandomSource
 
 from .card_draw import draw_cards
 from .match_setup import finish_setup
+from .player_action import CardNotInHandError
 
 
 class MulliganAlreadyTakenError(Exception):
@@ -42,24 +43,6 @@ class MulliganAlreadyTakenError(Exception):
         )
         self.user_id = user_id
         self.match_id = match_id
-
-
-class CardNotInHandError(Exception):
-    """A seleção cita uma carta que não está na mão daquele jogador.
-
-    Cobre também o identificador repetido: a validação consome a mão candidata
-    ao casar, então a segunda ocorrência já não está entre as restantes.
-    """
-
-    def __init__(
-        self, card_instance_id: CardInstanceId, user_id: int, in_hand: list[int]
-    ) -> None:
-        super().__init__(
-            f"card instance {card_instance_id} is not in the hand of user "
-            f"{user_id}: expected one of {in_hand}"
-        )
-        self.card_instance_id = card_instance_id
-        self.user_id = user_id
 
 
 def record_mulligan(
