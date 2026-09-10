@@ -24,7 +24,7 @@ from collections.abc import Sequence
 from apps.game.match import CardInstanceId, Match, MatchCard, PlayerState
 from apps.game.randomness import RandomSource
 
-from .card_draw import draw_from_deck_top
+from .card_draw import draw_cards
 from .match_setup import finish_setup
 
 
@@ -145,8 +145,7 @@ def _swap_returned_cards(
     for card in returned:
         player.hand.remove(card)
 
-    for _ in returned:
-        draw_from_deck_top(player)
+    draw_cards(match, player.user_id, len(returned), randomness=randomness)
 
     player.deck.extend(returned)
     player.deck = randomness.shuffled(player.deck, match.mint_roll())

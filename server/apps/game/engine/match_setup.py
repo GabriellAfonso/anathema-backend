@@ -23,7 +23,7 @@ from apps.game.match import (
 from apps.game.randomness import RandomSeed, RandomSource
 from apps.players.services.player_queries import PlayerData
 
-from .card_draw import draw_from_deck_top
+from .card_draw import draw_card, draw_cards
 
 # Fluxo de Partida §12.
 OPENING_HAND_SIZE = 4
@@ -124,7 +124,7 @@ def finish_setup(match: Match, *, randomness: RandomSource) -> None:
 
     holder = randomness.choose(match.players, match.mint_roll())
 
-    draw_from_deck_top(match.opponent_of(holder.user_id))
+    draw_card(match, match.opponent_of(holder.user_id).user_id, randomness=randomness)
 
     match.token_holder_user_id = holder.user_id
     match.priority_user_id = holder.user_id
@@ -142,12 +142,15 @@ def _ensure_valid_entry(entry: MatchEntry, catalog: CardCatalog) -> None:
 def _deal_opening_hand(
     match: Match, player: PlayerState, deck: Deck, randomness: RandomSource
 ) -> None:
-    """Materializa, embaralha e compra 4 -- os passos 2, 3 e 5 da §3."""
+    """Materializa, embaralha e compra 4 -- os passos 2, 3 e 5 da §3.
+
+    As 4 compras passam pela regra da §9, como toda compra do jogo. Nenhuma
+    das duas guardas dispara aqui: a mão parte de zero e o deck tem 40.
+    """
     cards = _mint_deck(match, deck)
     player.deck = randomness.shuffled(cards, match.mint_roll())
 
-    for _ in range(OPENING_HAND_SIZE):
-        draw_from_deck_top(player)
+    draw_cards(match, player.user_id, OPENING_HAND_SIZE, randomness=randomness)
 
 
 def _mint_deck(match: Match, deck: Deck) -> list[MatchCard]:
