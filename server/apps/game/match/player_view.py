@@ -66,8 +66,11 @@ class PlayerView(TypedDict):
     match_id: str
     round_number: int
     phase: MatchPhase
-    priority_user_id: int
-    token_holder_user_id: int
+    # `None` enquanto a fase é `MULLIGAN`: o sorteio da §3 ainda não aconteceu,
+    # e a tela que o cliente desenha nesse momento é a do mulligan, que não
+    # precisa de dono de token para existir.
+    priority_user_id: int | None
+    token_holder_user_id: int | None
     token_consumed: bool
     consecutive_passes: int
     stack: list[StackEntryDocument]

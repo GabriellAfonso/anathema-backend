@@ -11,6 +11,7 @@ dano acumulado e modificadores inclusive.
 """
 
 from apps.game.cards import CardId, EffectDuration
+from apps.game.randomness import RandomSeed
 
 from .cards_in_play import BankUnit, CardInstanceId, MatchCard
 from .documents import (
@@ -50,6 +51,8 @@ def to_match_document(match: Match) -> MatchDocument:
         "stack": [to_stack_entry_document(entry) for entry in match.stack],
         "consecutive_passes": match.consecutive_passes,
         "next_card_instance_id": match.next_card_instance_id,
+        "random_seed": match.random_seed,
+        "next_roll_ordinal": match.next_roll_ordinal,
     }
 
 
@@ -72,6 +75,8 @@ def match_from_document(document: MatchDocument) -> Match:
         stack=[stack_entry_from_document(entry) for entry in document["stack"]],
         consecutive_passes=document["consecutive_passes"],
         next_card_instance_id=document["next_card_instance_id"],
+        random_seed=RandomSeed(document["random_seed"]),
+        next_roll_ordinal=document["next_roll_ordinal"],
     )
 
 
@@ -86,6 +91,7 @@ def to_player_document(player: PlayerState) -> PlayerDocument:
         "graveyard": [to_card_document(card) for card in player.graveyard],
         "energy_max": player.energy_max,
         "energy_current": player.energy_current,
+        "mulligan_taken": player.mulligan_taken,
     }
 
 
@@ -99,6 +105,7 @@ def player_from_document(document: PlayerDocument) -> PlayerState:
         graveyard=[card_from_document(card) for card in document["graveyard"]],
         energy_max=document["energy_max"],
         energy_current=document["energy_current"],
+        mulligan_taken=document["mulligan_taken"],
     )
 
 

@@ -38,6 +38,10 @@ class PlayerState:
     # (§4).
     energy_max: int = 0
     energy_current: int = 0
+    # O mulligan da §3 é uma vez por jogador por partida. Este booleano é a
+    # única marca dele: "de quem o setup ainda espera" é derivado daqui pelo
+    # `Match`, e não guardado numa segunda lista que pudesse divergir.
+    mulligan_taken: bool = False
 
     @property
     def user_id(self) -> int:

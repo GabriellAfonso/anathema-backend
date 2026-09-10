@@ -5,9 +5,10 @@ dano, não se troca prioridade nem se avança fase. O estado é dado; quem o
 transforma é o motor.
 
 >>> from apps.game.match import Match
->>> match = Match.start(one, two)
 >>> match.has_player(7)
 True
+
+Quem monta uma partida é `apps.game.engine.start_match`, que executa a §3.
 
 `__all__` é explícito porque `mypy.ini` roda com `strict`, que liga
 `no_implicit_reexport`: sem esta lista, nenhum consumidor importa daqui.

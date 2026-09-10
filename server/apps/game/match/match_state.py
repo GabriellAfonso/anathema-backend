@@ -1,6 +1,7 @@
 """Uma partida viva entre dois jogadores, endereçada por `match_id`.
 
-Construída pelo MatchStore, nunca direto de um consumer: o estado precisa
+Construída por `apps.game.engine.start_match` e gravada pelo `MatchStore`,
+nunca montada à mão num consumer: montar a partida é a §3, e o estado precisa
 chegar ao Redis para os outros workers do uvicorn enxergarem a partida.
 
 Este módulo guarda o estado e responde perguntas sobre ele. Nada aqui decide
@@ -11,9 +12,8 @@ regra, e regra é do motor.
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from uuid import uuid4
 
-from apps.players.services.player_queries import PlayerData
+from apps.game.randomness import RandomSeed, Roll
 
 from .cards_in_play import BankUnit, CardInstanceId
 from .player_state import PlayerState
@@ -21,12 +21,18 @@ from .spell_stack import StackEntry
 
 
 class MatchPhase(StrEnum):
-    """As cinco fases da §2 do Fluxo de Partida. Conjunto fechado.
+    """As cinco fases da §2, mais a espera do setup. Conjunto fechado.
+
+    A §2 lista cinco porque descreve o ciclo de uma rodada. `MULLIGAN` não é
+    uma sexta fase do ciclo: é o momento da §3, antes da Rodada 1, em que a
+    partida já existe e já está gravada e o setup espera os dois jogadores
+    decidirem. Uma partida sai dela quando o segundo responde e nunca volta.
 
     `COMBAT` existe desde já, mas o estado que o combate precisa — o
     pareamento de bloqueadores da §7.2 — entra na feature de combate.
     """
 
+    MULLIGAN = "mulligan"
     UPKEEP = "upkeep"
     ACTION = "action"
     STACK_RESOLUTION = "stack_resolution"
@@ -54,9 +60,9 @@ class NotAParticipantError(Exception):
 class Match:
     """A partida inteira: os dois jogadores e tudo que a §2 lista.
 
-    >>> match = Match.start({"user_id": 7, ...}, {"user_id": 9, ...})
-    >>> match.priority_user_id
-    7
+    >>> match = start_match(one, two, catalog=catalog, randomness=src, seed=s)
+    >>> match.phase
+    <MatchPhase.MULLIGAN: 'mulligan'>
     """
 
     match_id: str
@@ -66,11 +72,20 @@ class Match:
     # só sobrevivia porque convertia de volta na leitura. Sem chave, não sobra
     # o que converter.
     players: tuple[PlayerState, PlayerState]
-    token_holder_user_id: int
-    priority_user_id: int
+    # A semente de onde sai toda a aleatoriedade desta partida. Nasce na
+    # criação e não muda. Fica no estado, e não num gerador de processo, porque
+    # o mulligan e o sorteio do token acontecem depois de a partida ir ao Redis
+    # e voltar -- possivelmente em outro worker, que precisa continuar a mesma
+    # sequência.
+    random_seed: RandomSeed
+    # `None` até o sorteio da §3, os dois juntos. Não é valor de espera: no
+    # meio do setup não existe dono do token, e afirmar um seria mentir num
+    # campo que ninguém checa.
+    token_holder_user_id: int | None = None
+    priority_user_id: int | None = None
     round_number: int = 1
     token_consumed: bool = False
-    phase: MatchPhase = MatchPhase.UPKEEP
+    phase: MatchPhase = MatchPhase.MULLIGAN
     # Fim da lista é o topo: `append` empilha, e a resolução é LIFO (§6).
     stack: list[StackEntry] = field(default_factory=list)
     consecutive_passes: int = 0
@@ -78,23 +93,41 @@ class Match:
     # porque a partida é lida por qualquer worker do uvicorn: um contador de
     # processo daria números repetidos entre workers.
     next_card_instance_id: int = 1
+    # Contador de sorteios, pelo mesmo motivo do contador de cartas: um
+    # contador de processo daria números repetidos entre workers. Cada sorteio
+    # abre um fluxo próprio a partir de `(random_seed, ordinal)`, então quantos
+    # números uma operação consome não afeta a seguinte.
+    next_roll_ordinal: int = 1
 
-    @classmethod
-    def start(cls, player1: PlayerData, player2: PlayerData) -> "Match":
-        """Partida nova, válida e ainda não jogável.
+    def mint_roll(self) -> Roll:
+        """Cunha o próximo sorteio desta partida.
 
-        Embaralhar, comprar 4, mulligan e sortear o token são o setup da §3 e
-        entram com a feature de setup. Até lá as quatro zonas nascem vazias.
+        Único ponto do código que produz um `Roll`, como
+        `mint_card_instance_id` é o único que produz identidade de carta.
+        Dois sorteios da mesma partida nunca compartilham o ordinal, e é isso
+        que impede duas operações de consumirem o mesmo fluxo.
 
-        >>> Match.start(one, two).phase
-        <MatchPhase.UPKEEP: 'upkeep'>
+        >>> match.mint_roll().ordinal
+        1
         """
-        return cls(
-            match_id=str(uuid4()),
-            players=(PlayerState(profile=player1), PlayerState(profile=player2)),
-            # Valor de espera, não regra: quem sorteia o dono do token é a §3.
-            token_holder_user_id=player1["user_id"],
-            priority_user_id=player1["user_id"],
+        minted = self.next_roll_ordinal
+        self.next_roll_ordinal += 1
+
+        return Roll(seed=self.random_seed, ordinal=minted)
+
+    @property
+    def awaiting_mulligan_user_ids(self) -> tuple[int, ...]:
+        """De quem o setup ainda espera. Vazia = pronto para o sorteio do token.
+
+        Derivada de `mulligan_taken`, nunca gravada: uma segunda lista a manter
+        em sincronia não daria erro quando alguém esquecesse de atualizá-la --
+        daria espera eterna, que é pior.
+
+        >>> match.awaiting_mulligan_user_ids
+        (7, 9)
+        """
+        return tuple(
+            player.user_id for player in self.players if not player.mulligan_taken
         )
 
     def has_player(self, user_id: int | None) -> bool:

@@ -82,18 +82,30 @@ class PlayerDocument(TypedDict):
     graveyard: list[CardDocument]
     energy_max: int
     energy_current: int
+    mulligan_taken: bool
 
 
 class MatchDocument(TypedDict):
-    """A partida inteira. `players` é lista de dois, na ordem do par."""
+    """A partida inteira. `players` é lista de dois, na ordem do par.
+
+    Não tem número de versão de esquema, e continua não tendo. A `version` que
+    o Redis guarda ao lado deste documento é versão de **escrita**, do
+    compare-and-swap de `store.py`, e por isso não mora aqui.
+    """
 
     match_id: str
     players: list[PlayerDocument]
     round_number: int
-    token_holder_user_id: int
+    # `None` enquanto a partida está na espera do mulligan: o sorteio da §3 é
+    # o que os preenche, os dois juntos.
+    token_holder_user_id: int | None
     token_consumed: bool
-    priority_user_id: int
+    priority_user_id: int | None
     phase: MatchPhase
     stack: list[StackEntryDocument]
     consecutive_passes: int
     next_card_instance_id: int
+    # `RandomSeed` é `str` em tempo de execução; a volta reembrulha, como
+    # `CardId` e `CardInstanceId` já fazem.
+    random_seed: str
+    next_roll_ordinal: int
