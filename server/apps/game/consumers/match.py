@@ -1,6 +1,6 @@
 from urllib.parse import parse_qs
 
-from apps.game.match import Match
+from apps.game.match import Match, build_player_view
 from apps.game.match.client import get_match_store
 from apps.game.match.store import MatchStore
 
@@ -49,7 +49,52 @@ class MatchConsumer(BaseConsumer):
 
         self.match = match
 
-        await self.send_event(type="match_start", payload={})
+        await self.channel_layer.group_add(
+            self.match_group(match_id),
+            self.channel_name,
+        )
+        await self.send_match_start(match)
+
+    async def on_disconnect(self, code: int) -> None:
+        """Sai do grupo da partida.
+
+        `self.match` é None num socket que os gates recusaram: ele foi aceito
+        para receber o motivo, então chega aqui sem nunca ter entrado no
+        grupo, e o discard não teria o que desfazer.
+        """
+        if self.match is None:
+            return
+
+        await self.channel_layer.group_discard(
+            self.match_group(self.match.match_id),
+            self.channel_name,
+        )
+
+    @classmethod
+    def match_group(cls, match_id: str) -> str:
+        """Grupo que endereça todos os sockets de uma mesma partida.
+
+        Outro eixo do `user_group` do BaseConsumer: aquele endereça os sockets
+        de um usuário, este os dois lados de uma partida. Sem ele a jogada de
+        um jogador não teria por onde chegar ao outro.
+
+        >>> MatchConsumer.match_group("m-1")
+        'match.match.m-1'
+        """
+        return f"{cls.group_prefix}.match.{match_id}"
+
+    async def send_match_start(self, match: Match) -> None:
+        """Abre o socket com a partida como ela está agora.
+
+        É isto que torna a reconexão possível: reconectar é literalmente
+        conectar de novo, e o estado chega no mesmo frame de sempre. Por isso
+        não existe mensagem `resync` nem versionamento -- o `MatchStore`
+        guarda a partida no Redis por 6h, então ela sobrevive à queda.
+        """
+        await self.send_event(
+            type="match_start",
+            payload=build_player_view(match, self.user_id),
+        )
 
     def get_match_id(self) -> str | None:
         query_string: str = self.scope["query_string"].decode()

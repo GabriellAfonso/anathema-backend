@@ -51,13 +51,11 @@ def connect_as(
 async def test_participant_gets_match_start(
     matches: FakeMatchStore, match: Match
 ) -> None:
+    """Só o gate: o que vem no payload é de test_match_consumer_state.py."""
     client = connect_as(matches, PLAYER_ONE, match.match_id)
     await client.connect()
 
-    assert await client.receive_json_from() == {
-        "type": "match_start",
-        "payload": {},
-    }
+    assert (await client.receive_json_from())["type"] == "match_start"
     await client.disconnect()
 
 
