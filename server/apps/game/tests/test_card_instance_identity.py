@@ -73,7 +73,7 @@ def test_no_identifier_repeats_across_the_two_players() -> None:
 
 def test_the_identifier_survives_every_zone_change(match: Match) -> None:
     """Deck, mão, banco, pilha e cemitério: o mesmo número nas cinco."""
-    player = match.player(match.priority_user_id)
+    player = match.players[0]
     player.deck = fake_cards(match, [KRONOS])
     born = player.deck[0].card_instance_id
 
@@ -87,7 +87,7 @@ def test_the_identifier_survives_every_zone_change(match: Match) -> None:
 def test_moving_to_the_bank_keeps_the_same_card_object(match: Match) -> None:
     """A identidade sobrevive por construção: `BankUnit` contém a carta, não
     copia os campos dela."""
-    player = match.player(match.priority_user_id)
+    player = match.players[0]
     player.hand = fake_cards(match, [KRONOS])
     card = player.hand[0]
 
@@ -98,7 +98,7 @@ def test_moving_to_the_bank_keeps_the_same_card_object(match: Match) -> None:
 
 def test_a_deck_reset_returns_the_same_identifiers(match: Match) -> None:
     """O reset da §9 devolve as mesmas cartas, sem passar pelo contador."""
-    player = match.player(match.priority_user_id)
+    player = match.players[0]
     player.graveyard = fake_cards(match, [KRONOS, 22, 1004])
     buried = [card.card_instance_id for card in player.graveyard]
     counter_before = match.next_card_instance_id

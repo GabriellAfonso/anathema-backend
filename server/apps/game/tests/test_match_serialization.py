@@ -187,3 +187,38 @@ def _numeric_keys(node: Any) -> list[str]:
         return [key for item in node for key in _numeric_keys(item)]
 
     return []
+
+
+def test_the_seed_survives_the_round_trip(match: Match) -> None:
+    """Sem a semente, o worker que recebe o mulligan não continua a mesma
+    sequência de sorteios -- ele começa outra."""
+    assert round_trip(match).random_seed == match.random_seed
+
+
+def test_the_roll_counter_survives_the_round_trip(match: Match) -> None:
+    """E sem o ordinal, ele repetiria o fluxo que já foi gasto."""
+    match.mint_roll()
+    match.mint_roll()
+
+    assert round_trip(match).next_roll_ordinal == match.next_roll_ordinal
+
+
+def test_the_pending_mulligan_survives_the_round_trip() -> None:
+    """A espera precisa atravessar o Redis: as duas respostas chegam por
+    conexões diferentes, possivelmente em workers diferentes."""
+    match = fake_new_match()
+    match.players[0].mulligan_taken = True
+
+    assert round_trip(match).awaiting_mulligan_user_ids == (PLAYER_TWO,)
+
+
+def test_an_absent_token_holder_comes_back_absent(match: Match) -> None:
+    """`None` não pode voltar como zero nem sumir do documento: é o que
+    distingue o meio do setup de uma partida já sorteada."""
+    match.token_holder_user_id = None
+    match.priority_user_id = None
+
+    reloaded = round_trip(match)
+
+    assert reloaded.token_holder_user_id is None
+    assert reloaded.priority_user_id is None

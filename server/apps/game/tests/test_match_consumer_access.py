@@ -12,9 +12,9 @@ from apps.game.consumers.match import (
     NOT_A_PARTICIPANT,
     MatchConsumer,
 )
-from apps.game.match import Match
+from apps.game.match import Match, MatchPhase
 from apps.game.tests.fake_match_store import FakeMatchStore
-from apps.game.tests.fake_player_data import fake_player_data
+from apps.game.tests.fake_setup import fake_started_match
 from apps.game.tests.fake_users import FakePlayerUser
 from apps.game.tests.websocket_test_client import WebsocketTestClient
 
@@ -30,10 +30,11 @@ def matches() -> FakeMatchStore:
 
 @pytest.fixture
 async def match(matches: FakeMatchStore) -> Match:
-    return await matches.create(
-        fake_player_data(PLAYER_ONE, "one"),
-        fake_player_data(PLAYER_TWO, "two"),
-    )
+    """Partida como o matchmaking a cria agora: passada pelo setup da §3."""
+    started = fake_started_match(PLAYER_ONE, PLAYER_TWO)
+    await matches.save(started)
+
+    return started
 
 
 def connect_as(
@@ -113,3 +114,18 @@ async def test_missing_match_id_is_closed_with_bad_request(
 
     assert await client.receive_close_code() == MATCH_ID_MISSING
     await client.disconnect()
+
+
+async def test_the_announced_match_is_already_dealt(
+    matches: FakeMatchStore, match: Match
+) -> None:
+    """A partida que o matchmaking anuncia já passou pelo setup da §3: quem
+    abre o socket encontra deck embaralhado e mão de 4, não zonas vazias."""
+    stored = await matches.get(match.match_id)
+    assert stored is not None
+
+    for player in stored.players:
+        assert len(player.hand) == 4
+        assert len(player.deck) == 36
+
+    assert stored.phase is MatchPhase.MULLIGAN

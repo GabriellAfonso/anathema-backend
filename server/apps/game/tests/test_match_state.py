@@ -23,13 +23,20 @@ def test_new_match_starts_on_round_one(match: Match) -> None:
     assert match.round_number == 1
 
 
-def test_new_match_starts_in_upkeep(match: Match) -> None:
-    assert match.phase is MatchPhase.UPKEEP
+def test_new_match_starts_waiting_for_the_mulligan(match: Match) -> None:
+    """A partida nasce na espera da §3, não no Upkeep: o Upkeep da Rodada 1 só
+    chega depois de os dois jogadores responderem o mulligan."""
+    assert match.phase is MatchPhase.MULLIGAN
 
 
-def test_the_five_phases_of_the_flow_note_exist() -> None:
-    """§2 lista cinco fases. Um sexto valor não pode ser representável."""
+def test_the_phase_set_is_closed(match: Match) -> None:
+    """As cinco fases da §2 mais a espera do setup, e nada além disso.
+
+    `MULLIGAN` não é uma sexta fase do ciclo da rodada: é o momento anterior à
+    Rodada 1, e é por isso que a §2 não a lista.
+    """
     assert [phase.value for phase in MatchPhase] == [
+        "mulligan",
         "upkeep",
         "action",
         "stack_resolution",
@@ -38,17 +45,38 @@ def test_the_five_phases_of_the_flow_note_exist() -> None:
     ]
 
 
+def test_the_setup_waits_for_both_players(match: Match) -> None:
+    assert match.awaiting_mulligan_user_ids == (PLAYER_ONE, PLAYER_TWO)
+
+
+def test_a_player_who_answered_leaves_the_waiting_list(match: Match) -> None:
+    """Derivado de `mulligan_taken`, e não de uma segunda lista que pudesse
+    divergir dele."""
+    match.players[0].mulligan_taken = True
+
+    assert match.awaiting_mulligan_user_ids == (PLAYER_TWO,)
+
+
+def test_rolls_never_share_an_ordinal(match: Match) -> None:
+    """Dois sorteios com o mesmo ordinal consumiriam o mesmo fluxo."""
+    minted = [match.mint_roll() for _ in range(5)]
+
+    assert len({roll.ordinal for roll in minted}) == 5
+
+
+def test_every_roll_carries_the_match_seed(match: Match) -> None:
+    assert match.mint_roll().seed == match.random_seed
+
+
 def test_token_starts_unconsumed(match: Match) -> None:
     assert not match.token_consumed
 
 
-def test_priority_starts_with_the_token_holder(match: Match) -> None:
-    assert match.priority_user_id == match.token_holder_user_id
-
-
-def test_token_holder_is_a_user_id_not_a_list_index(match: Match) -> None:
-    """A §2 nomeia o dono do token por jogador, e a identidade é `user_id`."""
-    assert match.token_holder_user_id == PLAYER_ONE
+def test_nobody_holds_the_token_before_the_draw(match: Match) -> None:
+    """`None` nos dois, e não um valor de espera: quem sorteia o dono do token
+    é a §3, e antes dela a partida não tem um."""
+    assert match.token_holder_user_id is None
+    assert match.priority_user_id is None
 
 
 def test_new_match_has_no_passes(match: Match) -> None:
@@ -137,7 +165,3 @@ def test_opponent_lookup_refuses_an_outsider_by_naming_them(match: Match) -> Non
 def test_refusal_names_the_match_too(match: Match) -> None:
     with pytest.raises(NotAParticipantError, match=match.match_id):
         match.player(OUTSIDER)
-
-
-def test_two_matches_do_not_share_an_id() -> None:
-    assert fake_new_match().match_id != fake_new_match().match_id

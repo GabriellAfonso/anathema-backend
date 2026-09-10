@@ -1,26 +1,73 @@
 """MatchStore runs against a real Redis: what is under test is that a match
 survives the round trip through JSON and comes back usable from another
 process. Uses a throwaway database so it never touches app data.
+
+O compare-and-swap de `mutate` também é contrato de Redis, e por isso mora
+aqui e não num teste de unidade: o que ele promete só é observável com duas
+escritas de verdade disputando a mesma chave.
 """
 
+import asyncio
 import json
 
 import pytest
 from redis.asyncio import Redis
 
+from apps.game.engine import record_mulligan
 from apps.game.match import Match, MatchPhase, build_player_view
-from apps.game.match.store import MATCH_TTL_SECONDS, MatchStore
+from apps.game.match.store import (
+    MATCH_TTL_SECONDS,
+    ConcurrentMatchWriteError,
+    MatchNotFoundError,
+    MatchStore,
+)
 from apps.game.tests.fake_match_state import fake_match_in_progress
-from apps.game.tests.fake_player_data import fake_player_data
+from apps.game.tests.fake_random_source import ScriptedRandomSource
+from apps.game.tests.fake_setup import fake_started_match
 
-PLAYER_ONE = fake_player_data(7, "one")
-PLAYER_TWO = fake_player_data(9, "two")
+PLAYER_ONE = 7
+PLAYER_TWO = 9
 OUTSIDER = 99
+
+
+class AlwaysStaleMatchStore(MatchStore):
+    """Store em que uma escrita alheia cai entre toda leitura e toda gravação.
+
+    Subclasse, e não monkeypatch: a interferência tem nome, e o que ela
+    substitui é exatamente o ponto que o compare-and-swap protege.
+    """
+
+    async def _swap_state(
+        self, match_id: str, version: bytes | str, match: Match
+    ) -> bool:
+        await self.save(match)
+
+        return await super()._swap_state(match_id, version, match)
 
 
 @pytest.fixture
 def store(redis: Redis) -> MatchStore:
     return MatchStore(redis, key_prefix="test:match")
+
+
+async def saved_new_match(store: MatchStore) -> Match:
+    """Uma partida recém-montada pelo setup, já gravada."""
+    match = fake_started_match(PLAYER_ONE, PLAYER_TWO)
+    await store.save(match)
+
+    return match
+
+
+async def saved_in_progress(store: MatchStore) -> Match:
+    """Uma partida com todas as zonas ocupadas, já gravada.
+
+    A partida do setup tem deck e mão, mas não tem banco, cemitério, pilha nem
+    modificador -- e zona vazia passa em qualquer serialização.
+    """
+    match = fake_match_in_progress()
+    await store.save(match)
+
+    return match
 
 
 async def stored_match(store: MatchStore, match: Match) -> Match:
@@ -31,20 +78,8 @@ async def stored_match(store: MatchStore, match: Match) -> Match:
     return reloaded
 
 
-async def saved_in_progress(store: MatchStore) -> Match:
-    """Uma partida com todas as zonas ocupadas, já gravada.
-
-    O caminho de criação ainda produz zonas vazias — o setup da §3 é de outra
-    feature —, e uma partida vazia sobrevive a qualquer serialização.
-    """
-    match = fake_match_in_progress()
-    await store.save(match)
-
-    return match
-
-
-async def test_created_match_is_readable_again(store: MatchStore) -> None:
-    match = await store.create(PLAYER_ONE, PLAYER_TWO)
+async def test_saved_match_is_readable_again(store: MatchStore) -> None:
+    match = await saved_new_match(store)
 
     assert (await stored_match(store, match)).match_id == match.match_id
 
@@ -55,30 +90,62 @@ async def test_unknown_match_is_none(store: MatchStore) -> None:
 
 async def test_public_profiles_survive_the_round_trip(store: MatchStore) -> None:
     """Quem reconecta precisa do apelido sem uma nova consulta ao banco."""
-    match = await store.create(PLAYER_ONE, PLAYER_TWO)
+    match = await saved_new_match(store)
 
     reloaded = await stored_match(store, match)
 
-    assert [player.profile for player in reloaded.players] == [PLAYER_ONE, PLAYER_TWO]
+    assert [player.profile for player in reloaded.players] == [
+        player.profile for player in match.players
+    ]
 
 
 async def test_participants_are_recognised_after_the_round_trip(
     store: MatchStore,
 ) -> None:
     """The gate in MatchConsumer reads this off a match it loaded from Redis."""
-    match = await store.create(PLAYER_ONE, PLAYER_TWO)
+    match = await saved_new_match(store)
 
     reloaded = await stored_match(store, match)
 
-    assert reloaded.has_player(7)
+    assert reloaded.has_player(PLAYER_ONE)
     assert not reloaded.has_player(OUTSIDER)
 
 
-async def test_a_created_match_starts_in_upkeep(store: MatchStore) -> None:
-    """Válida e ainda não jogável: embaralhar e comprar é o setup da §3."""
-    match = await store.create(PLAYER_ONE, PLAYER_TWO)
+async def test_a_created_match_waits_for_the_mulligan(store: MatchStore) -> None:
+    """O setup da §3 para na espera: o Upkeep da Rodada 1 é de outra feature."""
+    match = await saved_new_match(store)
 
-    assert (await stored_match(store, match)).phase is MatchPhase.UPKEEP
+    reloaded = await stored_match(store, match)
+
+    assert reloaded.phase is MatchPhase.MULLIGAN
+    assert reloaded.token_holder_user_id is None
+
+
+async def test_the_pending_mulligan_survives_the_round_trip(
+    store: MatchStore,
+) -> None:
+    """Sem isto, a partida volta do Redis sem saber de quem está esperando, e
+    o setup trava com um jogador que já respondeu."""
+    match = await saved_new_match(store)
+    record_mulligan(match, PLAYER_ONE, [], randomness=ScriptedRandomSource())
+    await store.save(match)
+
+    reloaded = await stored_match(store, match)
+
+    assert reloaded.awaiting_mulligan_user_ids == (PLAYER_TWO,)
+    assert reloaded.phase is MatchPhase.MULLIGAN
+
+
+async def test_the_seed_and_the_roll_counter_survive_the_round_trip(
+    store: MatchStore,
+) -> None:
+    """É o par que deixa outro worker continuar a mesma sequência de sorteios."""
+    match = await saved_new_match(store)
+
+    reloaded = await stored_match(store, match)
+
+    assert reloaded.random_seed == match.random_seed
+    assert reloaded.next_roll_ordinal == match.next_roll_ordinal
 
 
 async def test_no_stored_json_object_is_keyed_by_user_id(
@@ -92,7 +159,7 @@ async def test_no_stored_json_object_is_keyed_by_user_id(
     """
     match = await saved_in_progress(store)
 
-    raw = await redis.get(f"test:match:{match.match_id}")
+    raw = await redis.hget(f"test:match:{match.match_id}", "state")
     assert raw is not None
 
     assert not _numeric_keys(json.loads(raw))
@@ -100,9 +167,9 @@ async def test_no_stored_json_object_is_keyed_by_user_id(
 
 async def test_user_ids_come_back_as_integers(store: MatchStore) -> None:
     """Eles continuam existindo; o que mudou é que são valores, não chaves."""
-    match = await store.create(PLAYER_ONE, PLAYER_TWO)
+    match = await saved_new_match(store)
 
-    assert (await stored_match(store, match)).player(7).user_id == 7
+    assert (await stored_match(store, match)).player(PLAYER_ONE).user_id == PLAYER_ONE
 
 
 async def test_a_full_match_comes_back_identical(store: MatchStore) -> None:
@@ -144,20 +211,128 @@ async def test_the_player_view_works_after_the_round_trip(store: MatchStore) -> 
 
 
 async def test_saved_state_replaces_the_stored_one(store: MatchStore) -> None:
-    match = await store.create(PLAYER_ONE, PLAYER_TWO)
-    match.priority_user_id = 9
+    match = await saved_new_match(store)
+    match.consecutive_passes = 2
 
     await store.save(match)
 
-    assert (await stored_match(store, match)).priority_user_id == 9
+    assert (await stored_match(store, match)).consecutive_passes == 2
 
 
 async def test_match_expires_so_abandoned_games_do_not_pile_up(
     store: MatchStore, redis: Redis
 ) -> None:
-    match = await store.create(PLAYER_ONE, PLAYER_TWO)
+    match = await saved_new_match(store)
 
     assert await redis.ttl(f"test:match:{match.match_id}") == MATCH_TTL_SECONDS
+
+
+async def test_mutate_applies_the_change_and_stores_it(store: MatchStore) -> None:
+    match = await saved_new_match(store)
+    source = ScriptedRandomSource()
+
+    await store.mutate(
+        match.match_id,
+        lambda live: record_mulligan(live, PLAYER_ONE, [], randomness=source),
+    )
+
+    assert (await stored_match(store, match)).awaiting_mulligan_user_ids == (
+        PLAYER_TWO,
+    )
+
+
+async def test_mutate_of_an_unknown_match_is_refused(store: MatchStore) -> None:
+    with pytest.raises(MatchNotFoundError, match="no-such-match"):
+        await store.mutate("no-such-match", lambda live: None)
+
+
+async def test_a_raise_inside_the_change_stores_nothing(store: MatchStore) -> None:
+    """É assim que uma recusa de mulligan deixa o estado exatamente como
+    estava: a exceção sobe antes de o script de escrita rodar."""
+    match = await saved_new_match(store)
+
+    def refuse(live: Match) -> None:
+        live.consecutive_passes = 2
+        raise ValueError("mudei de ideia")
+
+    with pytest.raises(ValueError):
+        await store.mutate(match.match_id, refuse)
+
+    assert (await stored_match(store, match)).consecutive_passes == 0
+
+
+async def test_the_write_version_advances_on_every_write(
+    store: MatchStore, redis: Redis
+) -> None:
+    """A versão é o que o compare-and-swap compara. Ela é versão de escrita, e
+    não de esquema -- esquema continua sem número."""
+    match = await saved_new_match(store)
+    key = f"test:match:{match.match_id}"
+
+    await store.mutate(match.match_id, lambda live: None)
+
+    version = await redis.hget(key, "version")
+    assert version is not None
+
+    assert int(version) == 2
+
+
+async def test_a_stale_version_is_refused_by_the_swap(
+    store: MatchStore, redis: Redis
+) -> None:
+    """O caso que o compare-and-swap existe para pegar, no nível do script:
+    a versão lida não é mais a que está lá, e a gravação não acontece."""
+    match = await saved_new_match(store)
+    key = f"test:match:{match.match_id}"
+    stale = await redis.hget(key, "version")
+    assert stale is not None
+
+    await store.save(match)
+
+    assert not await store._swap_state(match.match_id, stale, match)
+
+
+async def test_endless_interference_gives_up_instead_of_looping(
+    redis: Redis,
+) -> None:
+    """Com dois escritores a retentativa sempre fecha. Este é o caso que não
+    fecha nunca, e o que se prova é que ele para em vez de girar."""
+    store = AlwaysStaleMatchStore(redis, key_prefix="test:match")
+    match = await saved_new_match(store)
+
+    with pytest.raises(ConcurrentMatchWriteError, match=match.match_id):
+        await store.mutate(match.match_id, _bump_passes)
+
+
+async def test_two_concurrent_mulligans_both_land(store: MatchStore) -> None:
+    """O mulligan é a única coisa simultânea da partida, e as duas respostas
+    chegam por conexões diferentes -- possivelmente em workers diferentes.
+
+    Sem o compare-and-swap uma das duas gravações sobrescreve a outra, e a
+    partida fica esperando para sempre um jogador que já respondeu.
+    """
+    match = await saved_new_match(store)
+    source = ScriptedRandomSource()
+
+    await asyncio.gather(
+        store.mutate(
+            match.match_id,
+            lambda live: record_mulligan(live, PLAYER_ONE, [], randomness=source),
+        ),
+        store.mutate(
+            match.match_id,
+            lambda live: record_mulligan(live, PLAYER_TWO, [], randomness=source),
+        ),
+    )
+
+    final = await stored_match(store, match)
+
+    assert final.awaiting_mulligan_user_ids == ()
+    assert final.phase is MatchPhase.UPKEEP
+
+
+def _bump_passes(live: Match) -> None:
+    live.consecutive_passes += 1
 
 
 def _numeric_keys(node: object) -> list[str]:
