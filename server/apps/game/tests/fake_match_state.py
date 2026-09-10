@@ -12,6 +12,7 @@ estado guarda o identificador, e quem quer o molde consulta o catálogo.
 from collections.abc import Sequence
 
 from apps.game.cards import CardId, EffectDuration
+from apps.game.randomness import RandomSeed
 from apps.game.match import (
     AttackModifier,
     BankUnit,
@@ -20,6 +21,7 @@ from apps.game.match import (
     Match,
     MatchCard,
     MatchPhase,
+    PlayerState,
     StackEntry,
 )
 from apps.game.tests.fake_player_data import fake_player_data
@@ -28,18 +30,32 @@ PLAYER_ONE = 7
 PLAYER_TWO = 9
 OUTSIDER = 99
 
+# Fixos para que dois estados montados por este arquivo sejam comparáveis
+# entre si -- um `uuid4()` e uma semente de entropia real fariam duas partidas
+# "iguais" divergirem em dois campos que nenhum teste daqui exercita.
+FAKE_MATCH_ID = "fake-match-0001"
+FAKE_SEED = RandomSeed("fake-seed")
+
 
 def fake_new_match(
     user_id_one: int = PLAYER_ONE, user_id_two: int = PLAYER_TWO
 ) -> Match:
-    """Partida recém-pareada: zonas vazias, valores iniciais da §2.
+    """Partida de zonas vazias, com os valores iniciais da §2.
+
+    Monta o `Match` diretamente em vez de passar pelo setup da §3: este é um
+    fake de **estado**, e os testes que o usam querem preencher as zonas na
+    mão. Quem quer uma partida montada pelo setup usa `fake_setup.py`.
 
     >>> fake_new_match().round_number
     1
     """
-    return Match.start(
-        fake_player_data(user_id_one, "one"),
-        fake_player_data(user_id_two, "two"),
+    return Match(
+        match_id=FAKE_MATCH_ID,
+        players=(
+            PlayerState(profile=fake_player_data(user_id_one, "one")),
+            PlayerState(profile=fake_player_data(user_id_two, "two")),
+        ),
+        random_seed=FAKE_SEED,
     )
 
 
