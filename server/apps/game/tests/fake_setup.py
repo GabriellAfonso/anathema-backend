@@ -10,7 +10,12 @@ que é sorteado fora do controle da semente.
 """
 
 from apps.game.cards import mvp_catalog, starter_deck
-from apps.game.engine import MatchEntry, record_mulligan, start_match
+from apps.game.engine import (
+    MatchEntry,
+    begin_round_cycle,
+    record_mulligan,
+    start_match,
+)
 from apps.game.match import Match
 from apps.game.randomness import RandomSeed, RandomSource
 from apps.game.tests.fake_player_data import fake_player_data
@@ -63,5 +68,30 @@ def fake_match_ready_for_upkeep(
 
     record_mulligan(match, user_id_one, [], randomness=source)
     record_mulligan(match, user_id_two, [], randomness=source)
+
+    return match
+
+
+def fake_match_in_action_phase(
+    user_id_one: int = 7,
+    user_id_two: int = 9,
+    *,
+    randomness: RandomSource | None = None,
+    seed: RandomSeed = FAKE_SETUP_SEED,
+) -> Match:
+    """Rodada 1 já aberta: o primeiro empurrão dado, esperando ação.
+
+    É o setup fechado mais `begin_round_cycle` -- a partida como o transporte a
+    encontra quando o primeiro jogador vai agir.
+
+    >>> fake_match_in_action_phase().phase
+    <MatchPhase.ACTION: 'action'>
+    """
+    source = randomness or ScriptedRandomSource()
+    match = fake_match_ready_for_upkeep(
+        user_id_one, user_id_two, randomness=source, seed=seed
+    )
+
+    begin_round_cycle(match, randomness=source)
 
     return match
