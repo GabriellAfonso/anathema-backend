@@ -90,5 +90,5 @@ Decisions in force:
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/003-match-setup/plan.md`
+`specs/004-card-draw-deck-reset/plan.md`
 <!-- SPECKIT END -->
