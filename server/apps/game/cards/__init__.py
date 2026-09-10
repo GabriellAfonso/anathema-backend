@@ -54,6 +54,7 @@ from .effects import (
     TargetKind,
 )
 from .mvp_catalog import MVP_CARDS, MVP_SPELLS, MVP_UNITS, mvp_catalog
+from .starter_deck import starter_deck
 
 __all__ = [
     # Cartas
@@ -97,4 +98,5 @@ __all__ = [
     "ensure_valid_deck",
     "DECK_SIZE",
     "MAX_COPIES_PER_CARD",
+    "starter_deck",
 ]
