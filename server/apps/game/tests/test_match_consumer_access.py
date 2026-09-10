@@ -12,7 +12,7 @@ from apps.game.consumers.match import (
     NOT_A_PARTICIPANT,
     MatchConsumer,
 )
-from apps.game.match.models import Match
+from apps.game.match import Match
 from apps.game.tests.fake_match_store import FakeMatchStore
 from apps.game.tests.fake_player_data import fake_player_data
 from apps.game.tests.fake_users import FakePlayerUser

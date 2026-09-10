@@ -18,7 +18,9 @@ from redis.asyncio import Redis
 
 from apps.players.services.player_queries import PlayerData
 
-from .models import Match, MatchState
+from .documents import MatchDocument
+from .match_state import Match
+from .serialization import match_from_document, to_match_document
 
 # Partida abandonada não pode ficar para sempre no Redis. Longo o bastante para
 # um jogo lento ou uma reconexão nunca perderem o estado.
@@ -30,7 +32,7 @@ class MatchStore:
 
     >>> store = MatchStore(Redis.from_url("redis://localhost:6379/3"))
     >>> match = await store.create({"user_id": 7}, {"user_id": 9})
-    >>> (await store.get(match.match_id)).turn
+    >>> (await store.get(match.match_id)).priority_user_id
     7
     """
 
@@ -54,13 +56,13 @@ class MatchStore:
 
         # A fronteira JSON é o único ponto onde o formato não é verificável:
         # o que sai do Redis é `Any` até alguém afirmar o contrário.
-        return Match.from_dict(cast(MatchState, json.loads(state)))
+        return match_from_document(cast(MatchDocument, json.loads(state)))
 
     async def save(self, match: Match) -> None:
         """Grava o estado, renovando o TTL: partida em uso não expira."""
         await self._redis.set(
             self._key(match.match_id),
-            json.dumps(match.as_dict()),
+            json.dumps(to_match_document(match)),
             ex=MATCH_TTL_SECONDS,
         )
 

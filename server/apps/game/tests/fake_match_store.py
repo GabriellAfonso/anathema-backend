@@ -5,7 +5,7 @@ inject this instead of paying for a round trip. The Redis contract itself is
 covered by test_match_store.py.
 """
 
-from apps.game.match.models import Match
+from apps.game.match import Match
 from apps.players.services.player_queries import PlayerData
 
 

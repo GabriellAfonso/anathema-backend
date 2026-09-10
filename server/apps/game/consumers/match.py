@@ -1,7 +1,7 @@
 from urllib.parse import parse_qs
 
+from apps.game.match import Match
 from apps.game.match.client import get_match_store
-from apps.game.match.models import Match
 from apps.game.match.store import MatchStore
 
 from .base import BaseConsumer
