@@ -4,10 +4,10 @@
 mesmo que nada ali é regra. Este pacote é o outro lado: aqui se embaralha, se
 compra, se troca carta e se sorteia o dono do token.
 
-Moram aqui o setup da §3, a compra com reset de deck da §9, e o ciclo de rodada
-das §4, §5 e §8 -- o Upkeep, a Fase de Ação com as duas ações que existem, e o
-Fim de Rodada. A pilha da §6 e o combate da §7 caem no mesmo lugar quando
-entrarem.
+Moram aqui o setup da §3, a compra com reset de deck da §9, o ciclo de rodada
+das §4, §5 e §8 -- o Upkeep, a Fase de Ação com as três ações que existem, e o
+Fim de Rodada --, a pilha de feitiços da §6 com os cinco efeitos do MVP, e a
+condição de vitória da §10. O combate da §7 cai no mesmo lugar quando entrar.
 
 >>> from apps.game.engine import MatchEntry, start_match
 >>> match = start_match(one, two, catalog=catalog, randomness=source, seed=seed)
@@ -24,6 +24,13 @@ from .card_draw import (
     draw_card,
     draw_cards,
 )
+from .cast_spell import (
+    CardIsNotASpellError,
+    SpellNeedsTargetError,
+    SpellTakesNoTargetError,
+    SpellTargetNotOnBattlefieldError,
+    WrongSpellTargetSideError,
+)
 from .deck_reset import reset_deck_from_graveyard
 from .match_setup import (
     InvalidPlayerDeckError,
@@ -39,17 +46,30 @@ from .play_unit import (
     MAX_BANK_SIZE,
     BankIsFullError,
     CardIsNotAUnitError,
-    NotEnoughEnergyError,
 )
 from .player_action import (
     ActionKind,
     CardNotInHandError,
+    CastSpellAction,
     IllegalActionError,
+    MatchIsOverError,
+    NotEnoughEnergyError,
     NotYourPriorityError,
     PassAction,
     PhaseForbidsActionError,
     PlayerAction,
     PlayUnitAction,
+    card_in_hand,
+    ensure_enough_energy,
+)
+from .spell_effect import SpellEffectNeedsTargetError, apply_spell_effect
+from .unit_damage import bury_dead_units, deal_damage_to_unit
+from .unit_vitals import (
+    BankUnitIsNotAUnitError,
+    unit_has_damage_immunity,
+    unit_is_dead,
+    unit_max_health,
+    unit_remaining_health,
 )
 from .round_cycle import (
     CONSECUTIVE_PASSES_TO_EXIT,
@@ -58,6 +78,7 @@ from .round_cycle import (
     submit_action,
 )
 from .upkeep import MAX_ENERGY
+from .victory import change_nexus, check_victory
 
 __all__ = [
     # Compra (§9)
@@ -78,6 +99,7 @@ __all__ = [
     # A forma da ação (§5)
     "ActionKind",
     "PlayUnitAction",
+    "CastSpellAction",
     "PassAction",
     "PlayerAction",
     # Recusas de jogada (§5)
@@ -88,6 +110,19 @@ __all__ = [
     "CardIsNotAUnitError",
     "NotEnoughEnergyError",
     "BankIsFullError",
+    "MatchIsOverError",
+    # Recusas de lançamento de feitiço (§5B)
+    #
+    # `cast_spell` **não** entra aqui, pela mesma razão de `run_upkeep` e
+    # `end_round`: quem a chama é `round_cycle`.
+    "CardIsNotASpellError",
+    "SpellTakesNoTargetError",
+    "SpellNeedsTargetError",
+    "WrongSpellTargetSideError",
+    "SpellTargetNotOnBattlefieldError",
+    # Guardas que jogar unidade e lançar feitiço fazem identicamente (§5A, §5B)
+    "card_in_hand",
+    "ensure_enough_energy",
     # Ciclo de rodada (§4, §5, §8)
     #
     # `run_upkeep` e `end_round` **não** entram aqui: quem os chama é
@@ -97,6 +132,24 @@ __all__ = [
     "submit_action",
     "MatchNotAwaitingUpkeepError",
     "CONSECUTIVE_PASSES_TO_EXIT",
+    # Efeito de feitiço (§5B), o mesmo aplicador que o combate da §7.2 vai usar
+    "apply_spell_effect",
+    "SpellEffectNeedsTargetError",
+    # Vida, dano e morte de unidade
+    "unit_max_health",
+    "unit_remaining_health",
+    "unit_is_dead",
+    "unit_has_damage_immunity",
+    "BankUnitIsNotAUnitError",
+    "deal_damage_to_unit",
+    "bury_dead_units",
+    # Vitória (§10)
+    #
+    # As duas são públicas: `change_nexus` é a única porta que escreve Nexus, e
+    # `check_victory` é o que a §7.3 vai chamar depois do dano simultâneo, sem
+    # passar por ela.
+    "change_nexus",
+    "check_victory",
     # Constantes da §12 aplicadas por este pacote
     "MAX_ENERGY",
     "MAX_BANK_SIZE",

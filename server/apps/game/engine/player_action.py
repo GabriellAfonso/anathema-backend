@@ -6,7 +6,8 @@ três perguntas que a §5 faz de toda ela, na ordem em que a §5 as faz:
 
     1. o autor joga esta partida
     2. o autor tem a prioridade
-    3. a fase atual permite esta ação
+    3. a fase atual permite esta ação -- e uma partida terminada (§10) não
+       permite nenhuma
 
 Só depois disso a regra da ação -- a §5A em `play_unit.py`, a §5D em
 `round_cycle.py` -- é verificada. Um jogador sem prioridade **e** sem energia
@@ -14,9 +15,9 @@ recebe a recusa de prioridade, nunca a de energia.
 
 A união é fechada, como `Card` em `cards/card.py` e `UnitModifier` em
 `match/modifiers.py`, e pela mesma razão: um `match` que esqueça um braço é erro
-de mypy, não bug em produção. As duas ações que faltam da §5 -- jogar feitiço e
-declarar ataque -- entram como braços novos, e nem a guarda comum nem a porta de
-`round_cycle` mudam de forma para recebê-las.
+de mypy, não bug em produção. Jogar feitiço entrou como braço novo na feature
+006 sem que a guarda comum nem a porta de `round_cycle` mudassem de forma, que é
+exatamente o que a feature 005 escreveu prevendo. Declarar ataque entra igual.
 
 Recusar é levantar, e é o oposto do `None` da compra da §9, de propósito: mão
 cheia é fluxo normal do jogo e por isso é valor de retorno; jogada ilegal é
@@ -29,17 +30,25 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar
 
-from apps.game.match import CardInstanceId, Match, MatchPhase, PlayerState
+from apps.game.match import (
+    CardInstanceId,
+    Match,
+    MatchCard,
+    MatchOutcome,
+    MatchPhase,
+    PlayerState,
+)
 
 
 class ActionKind(StrEnum):
     """Discriminante da união, e o que o envelope de websocket vai carregar.
 
-    Conjunto fechado. As duas ações que faltam da §5 entram aqui junto com os
-    braços delas.
+    Conjunto fechado. A ação que falta da §5 -- declarar ataque -- entra aqui
+    junto com o braço dela.
     """
 
     PLAY_UNIT = "play_unit"
+    CAST_SPELL = "cast_spell"
     PASS = "pass"
 
 
@@ -86,9 +95,37 @@ class PassAction:
     actor_user_id: int
 
 
+@dataclass(frozen=True, slots=True)
+class CastSpellAction:
+    """Lançar um feitiço da mão (§5B).
+
+    `target_card_instance_id` é anulável porque a ausência de alvo é estado
+    **legítimo** de três dos cinco feitiços do MVP, e não campo que alguém
+    esqueceu de preencher. Mesma forma e mesma razão de
+    `StackEntry.target_card_instance_id`, cujo docstring já separa as duas
+    perguntas: `None` é "não mira nada", nunca "o alvo sumiu".
+
+    `{ACTION}` e não `{ACTION, COMBAT}`: o feitiço do defensor da §7.2 resolve
+    imediatamente, sem pilha e sem chance de resposta, e é outra ação -- não
+    esta com uma fase a mais.
+
+    >>> CastSpellAction(actor_user_id=7, card_instance_id=CardInstanceId(3),
+    ...                 target_card_instance_id=CardInstanceId(11))
+    CastSpellAction(actor_user_id=7, card_instance_id=3,
+                    target_card_instance_id=11)
+    """
+
+    action_kind: ClassVar[ActionKind] = ActionKind.CAST_SPELL
+    allowed_phases: ClassVar[frozenset[MatchPhase]] = frozenset({MatchPhase.ACTION})
+
+    actor_user_id: int
+    card_instance_id: CardInstanceId
+    target_card_instance_id: CardInstanceId | None = None
+
+
 # União fechada: um `match` sobre `PlayerAction` que esqueça um braço é erro de
 # mypy, não jogada que some em produção.
-PlayerAction = PlayUnitAction | PassAction
+PlayerAction = PlayUnitAction | PassAction | CastSpellAction
 
 
 class IllegalActionError(Exception):
@@ -154,6 +191,41 @@ class PhaseForbidsActionError(IllegalActionError):
         self.allowed_phases = allowed_phases
 
 
+class MatchIsOverError(PhaseForbidsActionError):
+    """A partida acabou (§10). Nenhuma ação é aceita, de nenhum jogador.
+
+    Subclasse e não irmã de `PhaseForbidsActionError`: a afirmação é
+    literalmente verdadeira -- a fase proíbe a ação --, e quem já escrevia
+    `except PhaseForbidsActionError` continua pegando o caso.
+
+    Levantada de **dentro** da terceira guarda, e não numa guarda nova antes
+    delas: a ordem participante -> prioridade -> fase é contrato da feature 005
+    e não muda. A consequência aceita é que um `user_id` que não joga a partida
+    recebe `NotAParticipantError` mesmo depois de ela acabar, porque a guarda 1
+    é sobre identidade.
+
+    >>> raise MatchIsOverError(ActionKind.PASS, outcome, "m-1")
+    MatchIsOverError: action 'pass' is not allowed in match 'm-1': the match is
+    over, defeated user_ids (7,)
+    """
+
+    def __init__(
+        self, action_kind: ActionKind, outcome: MatchOutcome | None, match_id: str
+    ) -> None:
+        # Pula o `__init__` de `PhaseForbidsActionError`: a mensagem dele cita
+        # as fases permitidas, e "esperava uma de ['action']" é resposta ruim
+        # para uma partida que acabou.
+        IllegalActionError.__init__(
+            self,
+            f"action '{action_kind}' is not allowed in match {match_id!r}: "
+            f"the match is over, defeated user_ids "
+            f"{outcome.defeated_user_ids if outcome else ()}",
+        )
+        self.action_kind = action_kind
+        self.outcome = outcome
+        self.match_id = match_id
+
+
 class CardNotInHandError(IllegalActionError):
     """A seleção cita uma carta que não está na mão daquele jogador.
 
@@ -178,6 +250,30 @@ class CardNotInHandError(IllegalActionError):
         self.user_id = user_id
 
 
+class NotEnoughEnergyError(IllegalActionError):
+    """Custo maior que a energia atual. Cita os dois números.
+
+    Nasceu em `play_unit.py`, na feature 005, e mora aqui desde a 006: a
+    pergunta -- "a energia do autor cobre o custo da carta?" -- é a mesma na
+    §5A e na §5B, e escrevê-la de novo em cada uma seria duplicar a regra.
+
+    >>> raise NotEnoughEnergyError(7, CardInstanceId(3), 3, 1)
+    NotEnoughEnergyError: user 7 cannot pay card instance 3: costs 3 energy, has 1
+    """
+
+    def __init__(
+        self, user_id: int, card_instance_id: CardInstanceId, cost: int, available: int
+    ) -> None:
+        super().__init__(
+            f"user {user_id} cannot pay card instance {card_instance_id}: "
+            f"costs {cost} energy, has {available}"
+        )
+        self.user_id = user_id
+        self.card_instance_id = card_instance_id
+        self.cost = cost
+        self.available = available
+
+
 def ensure_action_allowed(match: Match, action: PlayerAction) -> PlayerState:
     """As três guardas da §5, na ordem, antes de qualquer regra específica.
 
@@ -199,9 +295,53 @@ def ensure_action_allowed(match: Match, action: PlayerAction) -> PlayerState:
             action.actor_user_id, match.priority_user_id, match.match_id
         )
 
+    if match.phase is MatchPhase.FINISHED:
+        raise MatchIsOverError(action.action_kind, match.outcome, match.match_id)
+
     if match.phase not in action.allowed_phases:
         raise PhaseForbidsActionError(
             action.action_kind, match.phase, action.allowed_phases, match.match_id
         )
 
     return actor
+
+
+def card_in_hand(actor: PlayerState, card_instance_id: CardInstanceId) -> MatchCard:
+    """A carta citada, na mão **do autor**, ou `CardNotInHandError`.
+
+    A mão consultada é sempre a de quem age, então citar a carta do oponente cai
+    aqui, na mesma recusa de uma carta que não existe -- que é o que ela é, do
+    ponto de vista de quem está jogando.
+
+    Compartilhada pela §5A e pela §5B, pelo mesmo argumento que trouxe
+    `CardNotInHandError` de `mulligan.py` para cá.
+
+    >>> card_in_hand(actor, CardInstanceId(3)).card_id
+    1001
+    """
+    for card in actor.hand:
+        if card.card_instance_id == card_instance_id:
+            return card
+
+    raise CardNotInHandError(
+        card_instance_id,
+        actor.user_id,
+        [held.card_instance_id for held in actor.hand],
+    )
+
+
+def ensure_enough_energy(actor: PlayerState, card: MatchCard, cost: int) -> None:
+    """`energia >= custo`. Igual passa, e deixa a energia em 0.
+
+    Recebe o custo como `int` e não a carta do catálogo: é o único campo lido, e
+    `Unit` e `Spell` não têm base comum -- pedir uma delas obrigaria a inventar
+    um `Protocol` para dois tipos que já são uma união fechada.
+
+    >>> ensure_enough_energy(actor, card, 5)
+    """
+    if actor.energy_current >= cost:
+        return
+
+    raise NotEnoughEnergyError(
+        actor.user_id, card.card_instance_id, cost, actor.energy_current
+    )

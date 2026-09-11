@@ -20,14 +20,17 @@ from apps.game.cards import CardCatalog
 from apps.game.match import Match, MatchPhase, PlayerState
 from apps.game.randomness import RandomSource
 
+from .cast_spell import cast_spell
 from .play_unit import play_unit
 from .player_action import (
+    CastSpellAction,
     PassAction,
     PlayerAction,
     PlayUnitAction,
     ensure_action_allowed,
 )
 from .round_end import end_round
+from .stack_resolution import resolve_stack
 from .upkeep import run_upkeep
 
 # Fluxo de Partida §5, "Saída da fase". Dois, e não "todos os jogadores
@@ -107,7 +110,7 @@ def submit_action(
 
     _pass_priority(match, action)
     _exit_action_phase(match)
-    _settle(match, randomness)
+    _settle(match, randomness, catalog)
 
 
 def _apply_action(
@@ -121,6 +124,8 @@ def _apply_action(
     match action:
         case PlayUnitAction():
             play_unit(match, actor, action, catalog=catalog)
+        case CastSpellAction():
+            cast_spell(match, actor, action, catalog=catalog)
         case PassAction():
             _pass_turn(match)
 
@@ -143,10 +148,10 @@ def _pass_priority(match: Match, action: PlayerAction) -> None:
 def _exit_action_phase(match: Match) -> None:
     """A saída da §5, verificada depois de toda ação.
 
-    A condição da pilha cheia é escrita como a §5 manda e **não tem consumidor
-    nesta feature**: nada empilha, e o corpo da Resolução de Pilha é a §6. Ela
-    fica aqui para que a feature de pilha encaixe sem reescrever a saída -- que é
-    o ponto em que um erro de ordem não dá erro, dá partida travada.
+    Os dois ramos existem desde a feature 005, e o da pilha cheia passou a ter
+    consumidor na 006: `cast_spell` enche a pilha, e a Resolução de Pilha da §6
+    a esvazia. Nenhuma linha desta função mudou para isso acontecer, que era
+    exatamente o ponto de escrevê-la assim antes de haver o que resolver.
     """
     if match.consecutive_passes < CONSECUTIVE_PASSES_TO_EXIT:
         return
@@ -158,23 +163,34 @@ def _exit_action_phase(match: Match) -> None:
     match.phase = MatchPhase.ROUND_END
 
 
-def _settle(match: Match, randomness: RandomSource) -> None:
+def _settle(match: Match, randomness: RandomSource, catalog: CardCatalog) -> None:
     """Atravessa toda fase automática até a partida voltar a esperar ação.
 
-    Laço, e não `end_round()` seguido de `run_upkeep()`, por dois motivos: a
-    saída da §5 é quem decide qual fase vem, e a feature de pilha acrescenta um
-    braço aqui sem tocar em mais nada.
+    Laço, e não uma sequência fixa de chamadas: a saída da §5 é quem decide qual
+    fase vem, e a feature de pilha acrescentou um braço aqui sem tocar em mais
+    nada -- que era o que a feature 005 previu ao escrevê-lo como laço.
 
-    Termina sempre, e em no máximo duas voltas: `ROUND_END` leva a `UPKEEP` e
-    `UPKEEP` leva a `ACTION`. Nenhuma fase automática leva a outra que volte à
-    primeira.
+    Termina sempre, e em no máximo duas voltas. `STACK_RESOLUTION` leva a
+    `ACTION` ou a `FINISHED`; `ROUND_END` leva a `UPKEEP`; `UPKEEP` leva a
+    `ACTION`. Nenhuma fase automática leva a outra que volte à primeira -- a
+    Resolução de Pilha em particular zera os passes antes de devolver a Fase de
+    Ação, e é isso que a impede de cair no Fim de Rodada.
+
+    `FINISHED` não está entre as automáticas, então a partida encerrada para o
+    laço sem que ele precise saber da §10.
     """
     while match.phase in _AUTOMATIC_PHASES:
-        _run_automatic_phase(match, randomness)
+        _run_automatic_phase(match, randomness, catalog)
 
 
-def _run_automatic_phase(match: Match, randomness: RandomSource) -> None:
+def _run_automatic_phase(
+    match: Match, randomness: RandomSource, catalog: CardCatalog
+) -> None:
     """Um passo da cascata. Cada fase automática sabe para onde vai."""
+    if match.phase is MatchPhase.STACK_RESOLUTION:
+        resolve_stack(match, catalog=catalog)
+        return
+
     if match.phase is MatchPhase.ROUND_END:
         end_round(match)
         return
@@ -182,7 +198,6 @@ def _run_automatic_phase(match: Match, randomness: RandomSource) -> None:
     run_upkeep(match, randomness=randomness)
 
 
-# `STACK_RESOLUTION` não está aqui de propósito: a feature que enche a pilha é a
-# que precisa saber esvaziá-la, e acrescentar a fase sem o corpo da §6 deixaria o
-# laço girando para sempre.
-_AUTOMATIC_PHASES = frozenset({MatchPhase.ROUND_END, MatchPhase.UPKEEP})
+_AUTOMATIC_PHASES = frozenset(
+    {MatchPhase.STACK_RESOLUTION, MatchPhase.ROUND_END, MatchPhase.UPKEEP}
+)

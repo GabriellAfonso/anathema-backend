@@ -22,7 +22,12 @@ A unidade entra pronta e sem dano: não existe doença de invocação (§5A), e
 from apps.game.cards import CardCatalog, CardType, Unit
 from apps.game.match import BankUnit, CardInstanceId, Match, MatchCard, PlayerState
 
-from .player_action import CardNotInHandError, IllegalActionError, PlayUnitAction
+from .player_action import (
+    IllegalActionError,
+    PlayUnitAction,
+    card_in_hand,
+    ensure_enough_energy,
+)
 
 # Fluxo de Partida §12. Mora aqui, e não em `player_state.py`, porque aplicar o
 # teto é regra -- e aquele arquivo diz isso de si mesmo, nomeando este ponto: "o
@@ -47,26 +52,6 @@ class CardIsNotAUnitError(IllegalActionError):
         )
         self.card_instance_id = card.card_instance_id
         self.card_type = card_type
-
-
-class NotEnoughEnergyError(IllegalActionError):
-    """Custo maior que a energia atual. Cita os dois números.
-
-    >>> raise NotEnoughEnergyError(7, CardInstanceId(3), 3, 1)
-    NotEnoughEnergyError: user 7 cannot pay card instance 3: costs 3 energy, has 1
-    """
-
-    def __init__(
-        self, user_id: int, card_instance_id: CardInstanceId, cost: int, available: int
-    ) -> None:
-        super().__init__(
-            f"user {user_id} cannot pay card instance {card_instance_id}: "
-            f"costs {cost} energy, has {available}"
-        )
-        self.user_id = user_id
-        self.card_instance_id = card_instance_id
-        self.cost = cost
-        self.available = available
 
 
 class BankIsFullError(IllegalActionError):
@@ -107,34 +92,16 @@ def play_unit(
     >>> actor.bank[-1].card.card_instance_id
     3
     """
-    card = _card_in_hand(actor, action.card_instance_id)
+    card = card_in_hand(actor, action.card_instance_id)
     unit = _as_unit(card, catalog)
 
-    _ensure_enough_energy(actor, card, unit)
+    ensure_enough_energy(actor, card, unit.energy)
     _ensure_bank_has_room(actor)
 
     actor.energy_current -= unit.energy
     actor.hand.remove(card)
     actor.bank.append(BankUnit(card=card))
     match.consecutive_passes = 0
-
-
-def _card_in_hand(actor: PlayerState, card_instance_id: CardInstanceId) -> MatchCard:
-    """Guarda 1: a carta citada está na mão **do autor**.
-
-    A mão consultada é sempre a de quem age, então citar a carta do oponente cai
-    aqui, na mesma recusa de uma carta que não existe -- que é o que ela é, do
-    ponto de vista de quem está jogando.
-    """
-    for card in actor.hand:
-        if card.card_instance_id == card_instance_id:
-            return card
-
-    raise CardNotInHandError(
-        card_instance_id,
-        actor.user_id,
-        [held.card_instance_id for held in actor.hand],
-    )
 
 
 def _as_unit(card: MatchCard, catalog: CardCatalog) -> Unit:
@@ -149,16 +116,6 @@ def _as_unit(card: MatchCard, catalog: CardCatalog) -> Unit:
         raise CardIsNotAUnitError(card, template.card_type)
 
     return template
-
-
-def _ensure_enough_energy(actor: PlayerState, card: MatchCard, unit: Unit) -> None:
-    """Guarda 3: `energia >= custo`. Igual passa, e deixa a energia em 0."""
-    if actor.energy_current >= unit.energy:
-        return
-
-    raise NotEnoughEnergyError(
-        actor.user_id, card.card_instance_id, unit.energy, actor.energy_current
-    )
 
 
 def _ensure_bank_has_room(actor: PlayerState) -> None:
