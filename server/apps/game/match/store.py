@@ -6,8 +6,10 @@ socket de partida do jogador caía, e o gate de participante fecha isso com
 4404.
 
 Cada partida é um hash de dois campos: `state`, o documento JSON, e `version`,
-quantas vezes a partida já foi escrita. A versão existe **só** para o
-compare-and-swap de `mutate` -- não é versão de esquema, que continua não
+quantas vezes a partida já foi escrita. A versão existe para o
+compare-and-swap de `mutate` e, desde a feature 009, é também a posição de uma
+mudança na sequência da partida que o cliente recebe -- ela cresce 1 a cada
+escrita, em qualquer worker. Não é versão de esquema, que continua não
 existindo, e por isso ela não mora dentro do documento.
 
 O read-modify-write que este módulo registrava como adiado chegou com o
@@ -20,6 +22,7 @@ gameplay reusam.
 
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import cast
 
 from redis.asyncio import Redis
@@ -43,8 +46,9 @@ MUTATE_ATTEMPTS = 3
 # ARGV[1] = documento JSON; ARGV[2] = TTL em segundos
 SAVE_SCRIPT = """
 redis.call('HSET', KEYS[1], 'state', ARGV[1])
-redis.call('HINCRBY', KEYS[1], 'version', 1)
+local version = redis.call('HINCRBY', KEYS[1], 'version', 1)
 redis.call('EXPIRE', KEYS[1], ARGV[2])
+return version
 """
 
 # Compare-and-swap: grava só se a versão no Redis ainda for a que foi lida.
@@ -57,6 +61,9 @@ redis.call('EXPIRE', KEYS[1], ARGV[2])
 # Chave inexistente faz `HGET` devolver `false`, que nunca é igual a uma
 # string, então a troca é recusada em vez de criar a partida do nada.
 #
+# Devolve a versão nova, ou 0 na recusa. A primeira escrita já é a versão 1,
+# então 0 nunca é uma versão de verdade.
+#
 # KEYS[1] = chave da partida
 # ARGV[1] = versão esperada; ARGV[2] = documento JSON; ARGV[3] = TTL
 SWAP_SCRIPT = """
@@ -64,15 +71,27 @@ if redis.call('HGET', KEYS[1], 'version') ~= ARGV[1] then
     return 0
 end
 redis.call('HSET', KEYS[1], 'state', ARGV[2])
-redis.call('HINCRBY', KEYS[1], 'version', 1)
+local version = redis.call('HINCRBY', KEYS[1], 'version', 1)
 redis.call('EXPIRE', KEYS[1], ARGV[3])
-return 1
+return version
 """
 
 # A mutação recebe a partida carregada e a altera no lugar. Levantar de dentro
 # dela aborta sem gravar nada, que é como uma recusa de mulligan deixa o
 # estado intacto.
 MatchChange = Callable[[Match], None]
+
+
+@dataclass(frozen=True, slots=True)
+class StoredMatch:
+    """A partida e a versão de escrita em que ela foi lida ou gravada.
+
+    >>> (await store.get_stored(match_id)).version
+    3
+    """
+
+    match: Match
+    version: int
 
 
 class MatchNotFoundError(Exception):
@@ -129,19 +148,39 @@ class MatchStore:
 
         return _match_from_state(state)
 
-    async def save(self, match: Match) -> None:
-        """Grava o estado e renova o TTL, sem olhar quem escreveu antes.
+    async def get_stored(self, match_id: str) -> StoredMatch | None:
+        """Partida e versão numa leitura só, ou None se não existe mais.
+
+        É o que o socket de partida manda ao conectar: a versão deixa o cliente
+        comparar o estado inicial com atualizações que já estavam em trânsito.
+        """
+        version, state = await self._redis.hmget(
+            self._key(match_id), ["version", "state"]
+        )
+
+        if state is None or version is None:
+            return None
+
+        return StoredMatch(match=_match_from_state(state), version=int(version))
+
+    async def save(self, match: Match) -> int:
+        """Grava o estado e renova o TTL, sem olhar quem escreveu antes, e
+        devolve a versão nova.
 
         Para a criação. Mutação de partida viva usa `mutate`, que não
         sobrescreve escrita alheia.
         """
-        await self._save(
+        version = await self._save(
             keys=[self._key(match.match_id)],
             args=[_dump(match), MATCH_TTL_SECONDS],
         )
 
-    async def mutate(self, match_id: str, change: MatchChange) -> Match:
+        return int(version)
+
+    async def mutate(self, match_id: str, change: MatchChange) -> StoredMatch:
         """Lê, aplica `change`, e grava só se ninguém escreveu no meio.
+
+        Devolve a partida gravada e a versão que a gravação criou.
 
         Versão divergente significa que outro worker escreveu: relê e aplica
         `change` de novo, sobre o estado fresco. Reaplicar é seguro porque o
@@ -156,9 +195,10 @@ class MatchStore:
         for _ in range(MUTATE_ATTEMPTS):
             version, match = await self._read_versioned(match_id)
             change(match)
+            written = await self._swap_state(match_id, version, match)
 
-            if await self._swap_state(match_id, version, match):
-                return match
+            if written:
+                return StoredMatch(match=match, version=written)
 
         raise ConcurrentMatchWriteError(match_id, MUTATE_ATTEMPTS)
 
@@ -176,13 +216,14 @@ class MatchStore:
 
     async def _swap_state(
         self, match_id: str, version: bytes | str, match: Match
-    ) -> bool:
+    ) -> int:
+        """A versão nova, ou 0 se outra escrita chegou antes."""
         swapped = await self._swap(
             keys=[self._key(match_id)],
             args=[version, _dump(match), MATCH_TTL_SECONDS],
         )
 
-        return bool(swapped)
+        return int(swapped)
 
     def _key(self, match_id: str) -> str:
         return f"{self._key_prefix}:{match_id}"

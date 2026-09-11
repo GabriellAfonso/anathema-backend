@@ -42,6 +42,9 @@ class PlayerSideView(TypedDict):
     bank: list[BankUnitDocument]
     graveyard: list[CardDocument]
     deck_size: int
+    # Se o próprio mulligan já foi enviado. Sem isto, quem reconecta durante a
+    # espera não sabe se deve escolher ou aguardar o oponente (feature 009).
+    mulligan_taken: bool
 
 
 class OpponentSideView(TypedDict):
@@ -58,6 +61,8 @@ class OpponentSideView(TypedDict):
     bank: list[BankUnitDocument]
     graveyard: list[CardDocument]
     deck_size: int
+    # Só se o oponente já respondeu -- nada de quantas nem quais cartas trocou.
+    mulligan_taken: bool
 
 
 class PlayerView(TypedDict):
@@ -119,6 +124,7 @@ def _own_side(player: PlayerState) -> PlayerSideView:
         "bank": [to_bank_unit_document(unit) for unit in player.bank],
         "graveyard": [to_card_document(card) for card in player.graveyard],
         "deck_size": len(player.deck),
+        "mulligan_taken": player.mulligan_taken,
     }
 
 
@@ -132,4 +138,5 @@ def _opponent_side(opponent: PlayerState) -> OpponentSideView:
         "bank": [to_bank_unit_document(unit) for unit in opponent.bank],
         "graveyard": [to_card_document(card) for card in opponent.graveyard],
         "deck_size": len(opponent.deck),
+        "mulligan_taken": opponent.mulligan_taken,
     }
