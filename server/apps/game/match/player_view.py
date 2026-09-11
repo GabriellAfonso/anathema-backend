@@ -19,6 +19,7 @@ from apps.players.services.player_queries import PlayerData
 from .documents import (
     BankUnitDocument,
     CardDocument,
+    MatchOutcomeDocument,
     StackEntryDocument,
 )
 from .match_state import Match, MatchPhase
@@ -26,6 +27,7 @@ from .player_state import PlayerState
 from .serialization import (
     to_bank_unit_document,
     to_card_document,
+    to_match_outcome_document,
     to_stack_entry_document,
 )
 
@@ -73,6 +75,9 @@ class PlayerView(TypedDict):
     token_holder_user_id: int | None
     token_consumed: bool
     consecutive_passes: int
+    # `None` enquanto a partida corre. O desfecho não é segredo de ninguém: sem
+    # ele o cliente teria o estado terminal e não teria o resultado.
+    outcome: MatchOutcomeDocument | None
     stack: list[StackEntryDocument]
     you: PlayerSideView
     opponent: OpponentSideView
@@ -95,6 +100,7 @@ def build_player_view(match: Match, user_id: int) -> PlayerView:
         "token_holder_user_id": match.token_holder_user_id,
         "token_consumed": match.token_consumed,
         "consecutive_passes": match.consecutive_passes,
+        "outcome": to_match_outcome_document(match.outcome),
         "stack": [to_stack_entry_document(entry) for entry in match.stack],
         "you": _own_side(match.player(user_id)),
         "opponent": _opponent_side(match.opponent_of(user_id)),

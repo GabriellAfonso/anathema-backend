@@ -16,6 +16,7 @@ from enum import StrEnum
 from apps.game.randomness import RandomSeed, Roll
 
 from .cards_in_play import BankUnit, CardInstanceId
+from .match_outcome import MatchOutcome
 from .player_state import PlayerState
 from .spell_stack import StackEntry
 
@@ -30,6 +31,12 @@ class MatchPhase(StrEnum):
 
     `COMBAT` existe desde já, mas o estado que o combate precisa — o
     pareamento de bloqueadores da §7.2 — entra na feature de combate.
+
+    `FINISHED` também não é fase do ciclo: é o outro lado da partida, o da §10.
+    É **terminal** — nenhuma transição sai dela — e está fora de
+    `allowed_phases` de toda ação e fora do conjunto de fases automáticas da
+    cascata. As duas ausências são o que faz a partida terminada recusar
+    qualquer jogada e parar a cascata sem uma linha escrita para isso.
     """
 
     MULLIGAN = "mulligan"
@@ -38,6 +45,7 @@ class MatchPhase(StrEnum):
     STACK_RESOLUTION = "stack_resolution"
     COMBAT = "combat"
     ROUND_END = "round_end"
+    FINISHED = "finished"
 
 
 class NotAParticipantError(Exception):
@@ -86,6 +94,15 @@ class Match:
     round_number: int = 1
     token_consumed: bool = False
     phase: MatchPhase = MatchPhase.MULLIGAN
+    # `None` é partida em andamento (§10). Não é valor de espera: enquanto
+    # ninguém chegou a Nexus 0 não existe desfecho, e afirmar um seria mentir.
+    #
+    # Anda sempre junto de `phase is FINISHED`, e um ponto só do código escreve
+    # o par -- `_finish_match`, em `engine/victory.py`. Os dois campos existem
+    # porque respondem perguntas com consumidores diferentes: a fase é o que a
+    # cascata lê para parar e o que `allowed_phases` compara para recusar; isto
+    # é quem perdeu, que a fase não sabe dizer e não deveria.
+    outcome: MatchOutcome | None = None
     # Fim da lista é o topo: `append` empilha, e a resolução é LIFO (§6).
     stack: list[StackEntry] = field(default_factory=list)
     consecutive_passes: int = 0
@@ -114,6 +131,18 @@ class Match:
         self.next_roll_ordinal += 1
 
         return Roll(seed=self.random_seed, ordinal=minted)
+
+    @property
+    def is_over(self) -> bool:
+        """A partida acabou (§10). Derivada de `outcome`, nunca gravada.
+
+        Um booleano gravado ao lado do resultado poderia discordar dele, que é
+        o mesmo argumento de `awaiting_mulligan_user_ids` logo abaixo.
+
+        >>> match.is_over
+        False
+        """
+        return self.outcome is not None
 
     @property
     def awaiting_mulligan_user_ids(self) -> tuple[int, ...]:

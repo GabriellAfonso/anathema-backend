@@ -19,10 +19,12 @@ from .documents import (
     BankUnitDocument,
     CardDocument,
     MatchDocument,
+    MatchOutcomeDocument,
     ModifierDocument,
     PlayerDocument,
     StackEntryDocument,
 )
+from .match_outcome import InvalidMatchOutcomeError, MatchOutcome
 from .match_state import Match, MatchPhase, NotAParticipantError
 from .modifiers import (
     AttackModifier,
@@ -38,7 +40,12 @@ from .player_view import (
     PlayerView,
     build_player_view,
 )
-from .serialization import match_from_document, to_match_document
+from .serialization import (
+    match_from_document,
+    match_outcome_from_document,
+    to_match_document,
+    to_match_outcome_document,
+)
 from .spell_stack import StackEntry
 
 __all__ = [
@@ -60,15 +67,21 @@ __all__ = [
     "Match",
     "NotAParticipantError",
     "STARTING_NEXUS",
+    # Desfecho da partida (§10)
+    "MatchOutcome",
+    "InvalidMatchOutcomeError",
     # Forma gravada
     "CardDocument",
     "ModifierDocument",
     "BankUnitDocument",
     "StackEntryDocument",
     "PlayerDocument",
+    "MatchOutcomeDocument",
     "MatchDocument",
     "to_match_document",
     "match_from_document",
+    "to_match_outcome_document",
+    "match_outcome_from_document",
     # Visão do jogador
     "PlayerSideView",
     "OpponentSideView",

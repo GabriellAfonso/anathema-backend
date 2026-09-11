@@ -64,6 +64,13 @@ class BankUnitDocument(TypedDict):
     modifiers: list[ModifierDocument]
 
 
+class MatchOutcomeDocument(TypedDict):
+    """Quem perdeu (§10). Lista e não tupla: JSON não tem tupla, e a volta
+    reembrulha -- como `CardId`, `CardInstanceId` e `RandomSeed` já fazem."""
+
+    defeated_user_ids: list[int]
+
+
 class StackEntryDocument(TypedDict):
     """O alvo é o identificador, nunca uma referência. `None` é ausência de
     alvo, não alvo que sumiu."""
@@ -102,6 +109,9 @@ class MatchDocument(TypedDict):
     token_consumed: bool
     priority_user_id: int | None
     phase: MatchPhase
+    # `None` enquanto a partida corre, como `token_holder_user_id` é `None`
+    # antes do sorteio da §3. Anda junto de `phase == "finished"`.
+    outcome: MatchOutcomeDocument | None
     stack: list[StackEntryDocument]
     consecutive_passes: int
     next_card_instance_id: int

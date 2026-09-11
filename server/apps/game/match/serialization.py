@@ -18,10 +18,12 @@ from .documents import (
     BankUnitDocument,
     CardDocument,
     MatchDocument,
+    MatchOutcomeDocument,
     ModifierDocument,
     PlayerDocument,
     StackEntryDocument,
 )
+from .match_outcome import MatchOutcome
 from .match_state import Match, MatchPhase
 from .modifiers import (
     AttackModifier,
@@ -48,6 +50,7 @@ def to_match_document(match: Match) -> MatchDocument:
         "token_consumed": match.token_consumed,
         "priority_user_id": match.priority_user_id,
         "phase": match.phase,
+        "outcome": to_match_outcome_document(match.outcome),
         "stack": [to_stack_entry_document(entry) for entry in match.stack],
         "consecutive_passes": match.consecutive_passes,
         "next_card_instance_id": match.next_card_instance_id,
@@ -72,6 +75,7 @@ def match_from_document(document: MatchDocument) -> Match:
         round_number=document["round_number"],
         token_consumed=document["token_consumed"],
         phase=MatchPhase(document["phase"]),
+        outcome=match_outcome_from_document(document["outcome"]),
         stack=[stack_entry_from_document(entry) for entry in document["stack"]],
         consecutive_passes=document["consecutive_passes"],
         next_card_instance_id=document["next_card_instance_id"],
@@ -137,6 +141,27 @@ def bank_unit_from_document(document: BankUnitDocument) -> BankUnit:
         damage_taken=document["damage_taken"],
         modifiers=[modifier_from_document(m) for m in document["modifiers"]],
     )
+
+
+def to_match_outcome_document(
+    outcome: MatchOutcome | None,
+) -> MatchOutcomeDocument | None:
+    """`None` atravessa como `None`: partida em andamento não tem desfecho."""
+    if outcome is None:
+        return None
+
+    return {"defeated_user_ids": list(outcome.defeated_user_ids)}
+
+
+def match_outcome_from_document(
+    document: MatchOutcomeDocument | None,
+) -> MatchOutcome | None:
+    """A volta reembrulha a lista em tupla, e a validação da construção corre
+    de novo -- um documento corrompido é recusado na leitura, não usado."""
+    if document is None:
+        return None
+
+    return MatchOutcome(defeated_user_ids=tuple(document["defeated_user_ids"]))
 
 
 def to_stack_entry_document(entry: StackEntry) -> StackEntryDocument:
