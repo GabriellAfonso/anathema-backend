@@ -2,9 +2,11 @@
 entra nela.
 
 Só consulta. Nada aqui altera unidade, banco ou partida -- quem altera é
-`unit_damage.py`, e a separação é a razão de mudar de cada um: esta conta muda
-quando a fórmula de vida mudar (uma palavra-chave da §13), e aquela muda quando
-o efeito do dano mudar (o combate da §7).
+`unit_damage.py`, e a separação é a razão de mudar de cada um: estas contas
+mudam quando a fórmula de vida ou de ataque mudar (uma palavra-chave da §13), e
+aquela muda quando o efeito do dano mudar. O combate da §7 entrou sem tocar
+`unit_damage.py`, e acrescentou uma conta aqui -- que é a prova de que a
+separação estava no lugar certo.
 
 `BankUnit.damage_taken` diz de si mesmo que a conta de vida é do motor. Este é o
 motor chegando ao lugar que aquele texto reservou.
@@ -18,13 +20,13 @@ são a mesma desigualdade escrita de dois jeitos:
 Nomear as duas evita que o leitor precise adivinhar qual delas o nome significa
 naquela linha.
 
-`unit_effective_attack` **não mora aqui ainda**: SACRIFICIAL FIRE escreve o
-modificador de ataque, e quem lê ataque é a §7.3. Ela entra com o combate, junto
-das regras de bloqueio que só ele conhece.
+`unit_effective_attack` mora aqui desde o combate. SACRIFICIAL FIRE escreve o
+modificador de ataque desde a feature 006, e quem o **lê** é a §7.3 -- os dois
+lados de um par e o dano que chega ao Nexus saem dela.
 """
 
 from apps.game.cards import CardCatalog, CardType, Unit
-from apps.game.match import BankUnit, DamageImmunity, HealthModifier
+from apps.game.match import AttackModifier, BankUnit, DamageImmunity, HealthModifier
 
 
 class BankUnitIsNotAUnitError(Exception):
@@ -92,13 +94,44 @@ def unit_is_dead(unit: BankUnit, *, catalog: CardCatalog) -> bool:
     return unit_remaining_health(unit, catalog=catalog) <= 0
 
 
+def unit_effective_attack(unit: BankUnit, *, catalog: CardCatalog) -> int:
+    """O ataque do molde mais a soma dos modificadores de ataque, com piso em 0.
+
+    É a quantidade que a §7.3 usa nos dois lados de um par e no dano que chega
+    ao Nexus. Dano acumulado **não** entra: uma unidade machucada bate igual.
+
+    O piso existe porque `AttackModifier` aceita `amount` negativo por
+    construção -- o docstring dele diz "negativo é como se reduz ataque" -- e
+    nenhuma das cinco cartas do MVP produz um. Sem o piso, um ataque negativo
+    **curaria**: `deal_damage_to_unit` reduziria `damage_taken`, e o Nexus
+    subiria. Nenhuma das duas é regra da §7.
+
+    O piso mora aqui e não em `deal_damage_to_unit`: aquele módulo também serve
+    SUMMONED AX, cujo `amount` é positivo por construção, e pôr o piso lá
+    escreveria uma regra da §7.3 no caminho da §5B.
+
+    >>> unit_effective_attack(unit, catalog=catalog)   # molde 3, +3 do FIRE
+    6
+    """
+    template = _template_of(unit, catalog)
+    bonus = sum(
+        modifier.amount
+        for modifier in unit.modifiers
+        if isinstance(modifier, AttackModifier)
+    )
+
+    return max(0, template.attack + bonus)
+
+
 def unit_has_damage_immunity(unit: BankUnit) -> bool:
     """Se há um `DamageImmunity` ativo na unidade (MAGIC BARRIER).
 
     Sem `catalog`: imunidade é da instância, nunca do molde.
 
-    Mora entre as consultas e não entre as alterações porque é pergunta -- o
-    combate vai fazê-la sem causar dano nenhum, ao decidir bloqueio.
+    Mora entre as consultas e não entre as alterações porque é pergunta. Quem a
+    faz é `deal_damage_to_unit`, e é por isso que o combate da §7.3 herdou a
+    imunidade sem uma linha escrita para ela: o dano de combate entra pela mesma
+    porta que o de feitiço.
 
     >>> unit_has_damage_immunity(unit)
     True

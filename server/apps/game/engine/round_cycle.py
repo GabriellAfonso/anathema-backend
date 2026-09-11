@@ -16,14 +16,27 @@ laço, e não uma sequência fixa de chamadas: quem decide a próxima fase é a 
 da §5, e o laço atravessa o que estiver lá.
 """
 
+from typing import assert_never
+
 from apps.game.cards import CardCatalog
 from apps.game.match import Match, MatchPhase, PlayerState
 from apps.game.randomness import RandomSource
 
+from .blocker_pairing import assign_blocker, remove_blocker
+from .cast_combat_spell import cast_combat_spell
 from .cast_spell import cast_spell
+from .combat_cleanup import end_combat
+from .declare_attack import declare_attack
 from .play_unit import play_unit
+from .combat_action import (
+    AssignBlockerAction,
+    CastCombatSpellAction,
+    EndDefenseWindowAction,
+    RemoveBlockerAction,
+)
 from .player_action import (
     CastSpellAction,
+    DeclareAttackAction,
     PassAction,
     PlayerAction,
     PlayUnitAction,
@@ -120,14 +133,31 @@ def _apply_action(
 
     `match` sobre a união fechada: um braço novo sem regra escrita é erro de
     mypy, não jogada que some em produção.
+
+    O `assert_never` é o que torna a exaustividade **verificada**. Um `match`
+    que devolve `None` não obriga o mypy a cobrir a união sozinho, ao contrário
+    de `to_modifier_document`, que devolve valor -- é o mesmo buraco que a
+    feature 006 encontrou em `spell_effect._dispatch`, e a mesma solução.
     """
     match action:
         case PlayUnitAction():
             play_unit(match, actor, action, catalog=catalog)
         case CastSpellAction():
             cast_spell(match, actor, action, catalog=catalog)
+        case DeclareAttackAction():
+            declare_attack(match, actor, action)
+        case AssignBlockerAction():
+            assign_blocker(match, actor, action)
+        case RemoveBlockerAction():
+            remove_blocker(match, action)
+        case CastCombatSpellAction():
+            cast_combat_spell(match, actor, action, catalog=catalog)
+        case EndDefenseWindowAction():
+            end_combat(match, catalog=catalog)
         case PassAction():
             _pass_turn(match)
+        case _:
+            assert_never(action)
 
 
 def _pass_turn(match: Match) -> None:
@@ -141,7 +171,16 @@ def _pass_priority(match: Match, action: PlayerAction) -> None:
     Usa `action.actor_user_id` em vez de `match.priority_user_id` porque a
     guarda comum já provou que os dois são o mesmo -- e este é um `int`, não um
     `int | None`.
+
+    O `return` é a janela do defensor da §7.2, a única exceção à alternância em
+    todo o jogo: ele bloqueia, desbloqueia e conjura quantas vezes quiser sem
+    devolver a vez. A exceção é propriedade **da ação**, como `allowed_phases`
+    já é, e é por isso que ela não vaza para a Fase de Ação -- todos os braços
+    da §5 declaram `keeps_priority = False`.
     """
+    if action.keeps_priority:
+        return
+
     match.priority_user_id = match.opponent_of(action.actor_user_id).user_id
 
 

@@ -5,9 +5,15 @@ mesmo que nada ali é regra. Este pacote é o outro lado: aqui se embaralha, se
 compra, se troca carta e se sorteia o dono do token.
 
 Moram aqui o setup da §3, a compra com reset de deck da §9, o ciclo de rodada
-das §4, §5 e §8 -- o Upkeep, a Fase de Ação com as três ações que existem, e o
-Fim de Rodada --, a pilha de feitiços da §6 com os cinco efeitos do MVP, e a
-condição de vitória da §10. O combate da §7 cai no mesmo lugar quando entrar.
+das §4, §5 e §8 -- o Upkeep, a Fase de Ação com as quatro ações que existem, e o
+Fim de Rodada --, a pilha de feitiços da §6 com os cinco efeitos do MVP, o
+combate da §7 com a janela livre do defensor e o dano simultâneo, e a condição
+de vitória da §10.
+
+Com o combate, o Fluxo de Partida está implementado de ponta a ponta: uma
+partida roda do setup da §3 à vitória da §10 sem tocar em websocket. O que a
+nota deixa em aberto -- timeout de jogada, palavras-chave de carta -- continua
+na §13 dela, e é problema de transporte ou de balanceamento, não deste pacote.
 
 >>> from apps.game.engine import MatchEntry, start_match
 >>> match = start_match(one, two, catalog=catalog, randomness=source, seed=seed)
@@ -24,12 +30,21 @@ from .card_draw import (
     draw_card,
     draw_cards,
 )
-from .cast_spell import (
-    CardIsNotASpellError,
-    SpellNeedsTargetError,
-    SpellTakesNoTargetError,
-    SpellTargetNotOnBattlefieldError,
-    WrongSpellTargetSideError,
+from .blocker_pairing import (
+    AttackerAlreadyBlockedError,
+    BlockerAlreadyBlockingError,
+    BlockerNotAssignedError,
+    BlockerNotInBankError,
+    UnitIsNotAttackingError,
+)
+from .declare_attack import (
+    AttackerNotInBankError,
+    AttackTokenAlreadyConsumedError,
+    BankHasNoUnitsError,
+    DuplicateAttackerError,
+    NoAttackersSelectedError,
+    NotTheTokenHolderError,
+    StackIsNotEmptyError,
 )
 from .deck_reset import reset_deck_from_graveyard
 from .match_setup import (
@@ -47,10 +62,17 @@ from .play_unit import (
     BankIsFullError,
     CardIsNotAUnitError,
 )
+from .action_kind import ActionKind
+from .combat_action import (
+    AssignBlockerAction,
+    CastCombatSpellAction,
+    EndDefenseWindowAction,
+    RemoveBlockerAction,
+)
 from .player_action import (
-    ActionKind,
     CardNotInHandError,
     CastSpellAction,
+    DeclareAttackAction,
     IllegalActionError,
     MatchIsOverError,
     NotEnoughEnergyError,
@@ -62,10 +84,18 @@ from .player_action import (
     card_in_hand,
     ensure_enough_energy,
 )
+from .spell_cast_guards import (
+    CardIsNotASpellError,
+    SpellNeedsTargetError,
+    SpellTakesNoTargetError,
+    SpellTargetNotOnBattlefieldError,
+    WrongSpellTargetSideError,
+)
 from .spell_effect import SpellEffectNeedsTargetError, apply_spell_effect
 from .unit_damage import bury_dead_units, deal_damage_to_unit
 from .unit_vitals import (
     BankUnitIsNotAUnitError,
+    unit_effective_attack,
     unit_has_damage_immunity,
     unit_is_dead,
     unit_max_health,
@@ -78,7 +108,7 @@ from .round_cycle import (
     submit_action,
 )
 from .upkeep import MAX_ENERGY
-from .victory import change_nexus, check_victory
+from .victory import change_nexus, change_nexus_simultaneously, check_victory
 
 __all__ = [
     # Compra (§9)
@@ -100,8 +130,14 @@ __all__ = [
     "ActionKind",
     "PlayUnitAction",
     "CastSpellAction",
+    "DeclareAttackAction",
     "PassAction",
     "PlayerAction",
+    # A forma da ação na janela do defensor (§7.2)
+    "AssignBlockerAction",
+    "RemoveBlockerAction",
+    "CastCombatSpellAction",
+    "EndDefenseWindowAction",
     # Recusas de jogada (§5)
     "IllegalActionError",
     "NotYourPriorityError",
@@ -111,15 +147,35 @@ __all__ = [
     "NotEnoughEnergyError",
     "BankIsFullError",
     "MatchIsOverError",
-    # Recusas de lançamento de feitiço (§5B)
+    # Recusas de lançamento de feitiço, compartilhadas pela §5B e pela §7.2
     #
-    # `cast_spell` **não** entra aqui, pela mesma razão de `run_upkeep` e
-    # `end_round`: quem a chama é `round_cycle`.
+    # `cast_spell` e `validated_spell_cast` **não** entram aqui, pela mesma
+    # razão de `run_upkeep` e `end_round`: quem as chama é `round_cycle`.
     "CardIsNotASpellError",
     "SpellTakesNoTargetError",
     "SpellNeedsTargetError",
     "WrongSpellTargetSideError",
     "SpellTargetNotOnBattlefieldError",
+    # Recusas de declaração de ataque (§5C, §7.1)
+    #
+    # `declare_attack` **não** entra aqui, pela mesma razão de `cast_spell`:
+    # quem a chama é `round_cycle`.
+    "NotTheTokenHolderError",
+    "AttackTokenAlreadyConsumedError",
+    "StackIsNotEmptyError",
+    "BankHasNoUnitsError",
+    "NoAttackersSelectedError",
+    "AttackerNotInBankError",
+    "DuplicateAttackerError",
+    # Recusas de bloqueio (§7.2)
+    #
+    # `assign_blocker` e `remove_blocker` **não** entram aqui, pela mesma razão:
+    # quem as chama é `round_cycle`.
+    "BlockerNotInBankError",
+    "UnitIsNotAttackingError",
+    "BlockerAlreadyBlockingError",
+    "AttackerAlreadyBlockedError",
+    "BlockerNotAssignedError",
     # Guardas que jogar unidade e lançar feitiço fazem identicamente (§5A, §5B)
     "card_in_hand",
     "ensure_enough_energy",
@@ -132,12 +188,14 @@ __all__ = [
     "submit_action",
     "MatchNotAwaitingUpkeepError",
     "CONSECUTIVE_PASSES_TO_EXIT",
-    # Efeito de feitiço (§5B), o mesmo aplicador que o combate da §7.2 vai usar
+    # Efeito de feitiço: o mesmo aplicador para a §5B e para a §7.2, e é a
+    # ausência de um parâmetro de origem que o mantém único
     "apply_spell_effect",
     "SpellEffectNeedsTargetError",
     # Vida, dano e morte de unidade
     "unit_max_health",
     "unit_remaining_health",
+    "unit_effective_attack",
     "unit_is_dead",
     "unit_has_damage_immunity",
     "BankUnitIsNotAUnitError",
@@ -145,10 +203,12 @@ __all__ = [
     "bury_dead_units",
     # Vitória (§10)
     #
-    # As duas são públicas: `change_nexus` é a única porta que escreve Nexus, e
-    # `check_victory` é o que a §7.3 vai chamar depois do dano simultâneo, sem
-    # passar por ela.
+    # As três são públicas, e diferem em **quando** apuram: `change_nexus` a
+    # cada alteração (§5B), `change_nexus_simultaneously` uma vez depois de
+    # todas (§7.3), e `check_victory` só apura. Escolher a errada entre as duas
+    # primeiras é o bug que nenhum teste de um jogador só pega.
     "change_nexus",
+    "change_nexus_simultaneously",
     "check_victory",
     # Constantes da §12 aplicadas por este pacote
     "MAX_ENERGY",
