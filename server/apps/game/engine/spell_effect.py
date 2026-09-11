@@ -40,6 +40,7 @@ from apps.game.match import (
 )
 
 from .unit_damage import bury_dead_units, deal_damage_to_unit
+from .unit_vitals import unit_has_damage_immunity
 from .victory import change_nexus
 
 
@@ -127,11 +128,15 @@ def _buff_unit_health(target: BankUnit, effect: BuffUnitHealth) -> None:
 
 
 def _prevent_unit_damage(target: BankUnit, effect: PreventUnitDamage) -> None:
-    """MAGIC BARRIER: a unidade aliada alvo não recebe dano.
+    """MAGIC BARRIER: a unidade aliada alvo ignora o próximo dano (§14).
 
-    A duração vem do efeito, e é ela que faz o Fim de Rodada varrer isto e não
-    varrer o buff de vida.
+    Não acumula: uma unidade que já tem barreira fica como está. A duração vem
+    do efeito -- permanente desde a correção da nota de 2026-09-11 --, e quem a
+    tira é o dano que ela absorve, não o Fim de Rodada.
     """
+    if unit_has_damage_immunity(target):
+        return
+
     target.modifiers.append(DamageImmunity(duration=effect.duration))
 
 

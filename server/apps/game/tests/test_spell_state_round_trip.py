@@ -229,13 +229,10 @@ def test_accumulated_damage_and_graveyards_survive_the_round_trip() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_the_round_end_sweeps_the_immunity_this_feature_creates() -> None:
-    """Primeiro caso real da varredura que a feature 005 escreveu sem casos.
-
-    MAGIC BARRIER como a feature 006 a entregou. A §14 da nota, corrigida em
-    2026-09-11, faz a barreira não expirar no fim da rodada; a feature que a
-    implementa reescreve este teste.
-    """
+def test_the_round_end_keeps_the_barrier() -> None:
+    """§14, corrigida em 2026-09-11: a barreira não expira no fim da rodada.
+    Até a correção este era o primeiro caso real da varredura da feature 005;
+    hoje nenhum feitiço do MVP cria modificador temporário."""
     catalog = mvp_catalog()
     source = ScriptedRandomSource()
     match = fake_spell_board(catalog=catalog, hand_one=(MAGIC_BARRIER,))
@@ -251,7 +248,7 @@ def test_the_round_end_sweeps_the_immunity_this_feature_creates() -> None:
 
     pass_until_priority_returns(match, catalog, source)
 
-    assert unit_has_damage_immunity(unit) is False
+    assert unit_has_damage_immunity(unit) is True
     assert match.round_number == 2
 
 

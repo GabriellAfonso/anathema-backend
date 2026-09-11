@@ -142,11 +142,48 @@ def test_a_damage_immunity_is_seen(unit: BankUnit) -> None:
 
 
 def test_damage_does_not_enter_an_immune_unit(unit: BankUnit) -> None:
-    unit.modifiers.append(DamageImmunity(duration=EffectDuration.UNTIL_END_OF_ROUND))
+    unit.modifiers.append(DamageImmunity(duration=EffectDuration.PERMANENT))
 
     deal_damage_to_unit(unit, 99)
 
     assert unit.damage_taken == 0
+
+
+def test_the_barrier_breaks_on_the_damage_it_absorbs(unit: BankUnit) -> None:
+    """§14: ignora o **próximo** dano, e some."""
+    unit.modifiers.append(DamageImmunity(duration=EffectDuration.PERMANENT))
+
+    deal_damage_to_unit(unit, 2)
+
+    assert unit_has_damage_immunity(unit) is False
+
+
+def test_the_damage_after_the_barrier_enters(unit: BankUnit) -> None:
+    unit.modifiers.append(DamageImmunity(duration=EffectDuration.PERMANENT))
+
+    deal_damage_to_unit(unit, 2)
+    deal_damage_to_unit(unit, 3)
+
+    assert unit.damage_taken == 3
+
+
+def test_zero_damage_does_not_break_the_barrier(unit: BankUnit) -> None:
+    """Dano de 0 não é dano: um atacante com ataque efetivo 0 não gasta a
+    barreira."""
+    unit.modifiers.append(DamageImmunity(duration=EffectDuration.PERMANENT))
+
+    deal_damage_to_unit(unit, 0)
+
+    assert unit_has_damage_immunity(unit) is True
+
+
+def test_the_barrier_leaves_the_other_modifiers_alone(unit: BankUnit) -> None:
+    buff = HealthModifier(amount=2, duration=EffectDuration.PERMANENT)
+    unit.modifiers.extend([buff, DamageImmunity(duration=EffectDuration.PERMANENT)])
+
+    deal_damage_to_unit(unit, 5)
+
+    assert unit.modifiers == [buff]
 
 
 def test_an_immune_unit_does_not_die(unit: BankUnit, catalog: CardCatalog) -> None:

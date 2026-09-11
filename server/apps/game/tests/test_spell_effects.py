@@ -30,7 +30,7 @@ def test_someones_shield_buffs_allied_health_forever() -> None:
     assert _effect_of(1001) == BuffUnitHealth(amount=2)
 
 
-def test_magic_barrier_protects_an_ally_until_the_round_ends() -> None:
+def test_magic_barrier_protects_an_ally_from_the_next_damage() -> None:
     assert _effect_of(1002) == PreventUnitDamage()
 
 
@@ -50,7 +50,7 @@ def test_every_spell_declares_target_and_duration() -> None:
     """A tabela *Efeitos do MVP* da spec, campo a campo."""
     expected = {
         1001: (TargetKind.ALLIED_UNIT, EffectDuration.PERMANENT),
-        1002: (TargetKind.ALLIED_UNIT, EffectDuration.UNTIL_END_OF_ROUND),
+        1002: (TargetKind.ALLIED_UNIT, EffectDuration.PERMANENT),
         1003: (TargetKind.NONE, EffectDuration.PERMANENT),
         1004: (TargetKind.NONE, EffectDuration.PERMANENT),
         1005: (TargetKind.ENEMY_UNIT, EffectDuration.PERMANENT),

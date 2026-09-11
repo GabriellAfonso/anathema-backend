@@ -13,29 +13,46 @@ Dano também **não é modificador**: não expira, e a varredura do Fim de Rodad
 """
 
 from apps.game.cards import CardCatalog
-from apps.game.match import BankUnit, Match, PlayerState
+from apps.game.match import BankUnit, DamageImmunity, Match, PlayerState
 
 from .unit_vitals import unit_has_damage_immunity, unit_is_dead
 
 
 def deal_damage_to_unit(unit: BankUnit, amount: int) -> None:
-    """Acumula dano na unidade. Imunidade ativa faz nada entrar.
+    """Acumula dano na unidade. Uma barreira absorve o dano inteiro e some.
+
+    Fluxo de Partida §14, corrigido em 2026-09-11: a MAGIC BARRIER ignora o
+    **próximo** dano, de qualquer fonte. Dano de 0 não é dano -- um atacante com
+    ataque efetivo 0 não gasta a barreira de ninguém.
 
     Não remove a unidade morta: quem faz isso é `bury_dead_units`, sobre os dois
     bancos, porque `BankUnit` não sabe de quem é.
 
-    O feitiço que acerta uma unidade imune é aceito e não faz nada -- o alvo
-    está em campo, o efeito foi aplicado, e aplicar 0 de dano é o resultado
-    correto.
+    O feitiço que acerta uma unidade com barreira é aceito e só gasta a
+    barreira -- o alvo está em campo, o efeito foi aplicado.
 
     >>> deal_damage_to_unit(unit, 3)
     >>> unit.damage_taken
     3
     """
+    if amount <= 0:
+        return
+
     if unit_has_damage_immunity(unit):
+        _break_barrier(unit)
         return
 
     unit.damage_taken += amount
+
+
+def _break_barrier(unit: BankUnit) -> None:
+    """Tira a barreira que acabou de absorver um dano. Há no máximo uma: a
+    MAGIC BARRIER não acumula."""
+    unit.modifiers = [
+        modifier
+        for modifier in unit.modifiers
+        if not isinstance(modifier, DamageImmunity)
+    ]
 
 
 def bury_dead_units(match: Match, *, catalog: CardCatalog) -> None:

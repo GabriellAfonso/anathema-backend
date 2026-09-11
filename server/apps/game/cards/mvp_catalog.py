@@ -111,9 +111,7 @@ MVP_SPELLS: tuple[Spell, ...] = (
         1002,
         "MAGIC BARRIER",
         energy=3,
-        description=(
-            "A unidade aliada alvo não recebe nenhum dano até o fim da rodada."
-        ),
+        description="A unidade aliada alvo ignora o próximo dano que receber.",
         effect=PreventUnitDamage(),
         image="magic_barrier",
     ),

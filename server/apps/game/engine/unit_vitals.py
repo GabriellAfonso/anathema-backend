@@ -124,7 +124,7 @@ def unit_effective_attack(unit: BankUnit, *, catalog: CardCatalog) -> int:
 
 
 def unit_has_damage_immunity(unit: BankUnit) -> bool:
-    """Se há um `DamageImmunity` ativo na unidade (MAGIC BARRIER).
+    """Se a unidade tem a barreira da MAGIC BARRIER, que absorve o próximo dano.
 
     Sem `catalog`: imunidade é da instância, nunca do molde.
 

@@ -64,14 +64,18 @@ class HealthModifier:
 
 @dataclass(frozen=True, slots=True)
 class DamageImmunity:
-    """A unidade não recebe dano enquanto isto estiver na lista.
+    """A barreira da MAGIC BARRIER: o próximo dano não entra, e ela some.
+
+    Consumir a barreira é regra, e mora em `engine/unit_damage.py`; aqui ela só
+    é representada. Até a correção da nota de 2026-09-11 era imunidade até o
+    fim da rodada, e o nome ficou.
 
     Sem `amount`: a mecânica é tudo ou nada. Um campo de quantidade anulável
     deixaria existir `DamageImmunity(amount=5)`, que não é estado nenhum — é o
     mesmo argumento que `effects.py` usa para `requires_target` ser derivado.
 
-    >>> DamageImmunity(duration=EffectDuration.UNTIL_END_OF_ROUND).duration
-    <EffectDuration.UNTIL_END_OF_ROUND: 'until_end_of_round'>
+    >>> DamageImmunity(duration=EffectDuration.PERMANENT).duration
+    <EffectDuration.PERMANENT: 'permanent'>
     """
 
     modifier_kind: ClassVar[ModifierKind] = ModifierKind.DAMAGE_IMMUNITY

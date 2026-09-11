@@ -68,16 +68,21 @@ class BuffUnitHealth(SpellEffectShape):
 
 @dataclass(frozen=True, slots=True)
 class PreventUnitDamage(SpellEffectShape):
-    """A unidade aliada alvo não recebe nenhum dano até o fim da rodada.
+    """A unidade aliada alvo ignora o próximo dano que receber (§14).
+
+    De qualquer fonte -- combate ou feitiço --, e a barreira some com ele. Não
+    expira no fim da rodada, e não acumula: uma segunda barreira na mesma
+    unidade não soma nada. Até a correção da nota de 2026-09-11 ela era
+    imunidade total até o fim da rodada.
 
     Sem campo próprio: a mecânica é tudo ou nada, não tem quantidade.
 
     >>> PreventUnitDamage().duration
-    <EffectDuration.UNTIL_END_OF_ROUND: 'until_end_of_round'>
+    <EffectDuration.PERMANENT: 'permanent'>
     """
 
     target_kind: ClassVar[TargetKind] = TargetKind.ALLIED_UNIT
-    duration: ClassVar[EffectDuration] = EffectDuration.UNTIL_END_OF_ROUND
+    duration: ClassVar[EffectDuration] = EffectDuration.PERMANENT
 
 
 @dataclass(frozen=True, slots=True)

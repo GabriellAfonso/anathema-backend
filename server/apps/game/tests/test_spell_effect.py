@@ -150,9 +150,10 @@ def test_barrier_grants_damage_immunity(match: Match, catalog: CardCatalog) -> N
     assert unit_has_damage_immunity(unit) is True
 
 
-def test_barrier_lasts_until_the_end_of_the_round(
+def test_barrier_does_not_expire_with_the_round(
     match: Match, catalog: CardCatalog
 ) -> None:
+    """§14: não expira no fim da rodada -- só o dano que ela absorve a tira."""
     one = match.players[0]
     unit = one.bank[0]
 
@@ -160,7 +161,19 @@ def test_barrier_lasts_until_the_end_of_the_round(
         match, one, effect_of(catalog, MAGIC_BARRIER), unit, catalog=catalog
     )
 
-    assert unit.modifiers[0].duration is EffectDuration.UNTIL_END_OF_ROUND
+    assert unit.modifiers[0].duration is EffectDuration.PERMANENT
+
+
+def test_a_second_barrier_does_not_stack(match: Match, catalog: CardCatalog) -> None:
+    one = match.players[0]
+    unit = one.bank[0]
+
+    for _ in range(2):
+        apply_spell_effect(
+            match, one, effect_of(catalog, MAGIC_BARRIER), unit, catalog=catalog
+        )
+
+    assert len(unit.modifiers) == 1
 
 
 def test_damage_does_not_enter_a_barriered_unit(
@@ -179,21 +192,24 @@ def test_damage_does_not_enter_a_barriered_unit(
     assert unit.damage_taken == 0
 
 
-def test_a_barriered_unit_does_not_die(match: Match, catalog: CardCatalog) -> None:
-    """E o feitiço não é recusado: o alvo estava em campo, o efeito foi
-    aplicado."""
+def test_the_barrier_absorbs_one_ax_and_the_next_one_hits(
+    match: Match, catalog: CardCatalog
+) -> None:
+    """E o feitiço que bate na barreira não é recusado: o alvo estava em campo,
+    o efeito foi aplicado, e a barreira foi gasta."""
     one, two = match.players
     unit = two.bank[0]
     apply_spell_effect(
         match, two, effect_of(catalog, MAGIC_BARRIER), unit, catalog=catalog
     )
 
-    for _ in range(5):
+    for _ in range(2):
         apply_spell_effect(
             match, one, effect_of(catalog, SUMMONED_AX), unit, catalog=catalog
         )
 
-    assert len(two.bank) == 1
+    assert unit.damage_taken == 3
+    assert unit_has_damage_immunity(unit) is False
 
 
 # --------------------------------------------------------------------------

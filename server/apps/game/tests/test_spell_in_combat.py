@@ -6,11 +6,9 @@ combate aberto: a vez que continua com o defensor enquanto ele bloqueia e
 conjura, o bloqueador que um feitiço salva, o atacante que um feitiço mata antes
 do dano, e a partida que acaba dentro da janela.
 
-Três testes daqui usam cartas cuja regra a segunda correção da nota
-(2026-09-11, §14) mudou, e foram trazidos da feature 007 **sem mudança de
-afirmação**: o bloqueador imune usa MAGIC BARRIER, e os dois da partida que
-acaba na janela usam SACRIFICIAL FIRE jogado pelo defensor. A feature da §14 os
-reescreve. O `return` que eles cobrem em `combat_cleanup._leave_combat` continua
+Dois testes daqui usam SACRIFICIAL FIRE jogado pelo defensor, que a segunda
+correção da nota (2026-09-11, §14) proíbe, e foram trazidos da feature 007
+**sem mudança de afirmação**. A regra do FIRE os reescreve. O `return` que eles cobrem em `combat_cleanup._leave_combat` continua
 existindo, e a desistência da §10 vai precisar dele.
 
 Custos do MVP: SOMEONE'S SHIELD 2, MAGIC BARRIER 3, LIFE POTION 4,
@@ -224,9 +222,8 @@ def test_a_buffed_blocker_survives_the_trade(
 def test_an_immune_blocker_takes_nothing_and_the_attacker_takes_its_share(
     catalog: CardCatalog, source: RandomSource
 ) -> None:
-    """MAGIC BARRIER como a feature 006 a entregou. A §14 muda a regra dela
-    (anula o próximo dano, não expira), e a feature que a implementa reescreve
-    este teste."""
+    """A barreira absorve o golpe do atacante e some; o bloqueador ainda bate
+    (§14)."""
     match = board(
         catalog,
         hand_two=(MAGIC_BARRIER,),
@@ -240,6 +237,7 @@ def test_an_immune_blocker_takes_nothing_and_the_attacker_takes_its_share(
     resolve(match, catalog=catalog, source=source)
 
     assert match.player(PLAYER_TWO).bank[0].damage_taken == 0
+    assert match.player(PLAYER_TWO).bank[0].modifiers == []
     assert match.player(PLAYER_ONE).bank[0].damage_taken == 2
 
 
