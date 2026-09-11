@@ -45,7 +45,6 @@ def test_the_phase_set_is_closed(match: Match) -> None:
         "mulligan",
         "upkeep",
         "action",
-        "stack_resolution",
         "combat",
         "round_end",
         "finished",
@@ -88,10 +87,6 @@ def test_nobody_holds_the_token_before_the_draw(match: Match) -> None:
 
 def test_new_match_has_no_passes(match: Match) -> None:
     assert match.consecutive_passes == 0
-
-
-def test_new_match_has_an_empty_stack(match: Match) -> None:
-    assert match.stack == []
 
 
 def test_instance_counter_starts_at_one(match: Match) -> None:

@@ -22,7 +22,6 @@ from apps.game.match import (
     MatchCard,
     MatchPhase,
     PlayerState,
-    StackEntry,
 )
 from apps.game.tests.fake_player_data import fake_player_data
 
@@ -60,7 +59,7 @@ def fake_new_match(
 
 
 def fake_match_in_progress() -> Match:
-    """Partida com todas as zonas ocupadas, dano, modificadores e pilha.
+    """Partida com todas as zonas ocupadas, dano e modificadores.
 
     É o estado que a ida e volta precisa para provar alguma coisa: zona vazia
     passa em qualquer serialização.
@@ -72,7 +71,6 @@ def fake_match_in_progress() -> Match:
 
     _fill_first_player(match)
     _fill_second_player(match)
-    _fill_stack(match)
     _advance_to_mid_round(match)
 
     return match
@@ -131,22 +129,6 @@ def _fill_second_player(match: Match) -> None:
     player.nexus = 20
     player.energy_max = 3
     player.energy_current = 3
-
-
-def _fill_stack(match: Match) -> None:
-    """Dois feitiços: o de baixo mira uma unidade, o de cima não mira nada.
-
-    Ordem importa — o fim da lista é o topo, e a resolução é LIFO (§6).
-    """
-    targeted, untargeted = fake_cards(match, [1002, 1003])
-    target = match.players[0].bank[1].card.card_instance_id
-
-    match.stack = [
-        StackEntry(
-            card=targeted, caster_user_id=PLAYER_TWO, target_card_instance_id=target
-        ),
-        StackEntry(card=untargeted, caster_user_id=PLAYER_ONE),
-    ]
 
 
 def _advance_to_mid_round(match: Match) -> None:

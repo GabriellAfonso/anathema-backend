@@ -75,7 +75,7 @@ def test_neither_deck_appears_in_the_view(view: PlayerView) -> None:
 
 def test_both_deck_sizes_appear(match: Match, view: PlayerView) -> None:
     """Contagem não revela carta nenhuma, e o cliente precisa dela para
-    desenhar a pilha de compra."""
+    desenhar o monte de compra."""
     assert (view["you"]["deck_size"], view["opponent"]["deck_size"]) == (
         len(match.player(PLAYER_ONE).deck),
         len(match.player(PLAYER_TWO).deck),
@@ -134,10 +134,10 @@ def test_the_shared_round_fields_appear(view: PlayerView) -> None:
     ) == (3, MatchPhase.ACTION, PLAYER_ONE, PLAYER_TWO, False, 1)
 
 
-def test_the_stack_appears_in_order(match: Match, view: PlayerView) -> None:
-    assert [entry["card"]["card_instance_id"] for entry in view["stack"]] == [
-        entry.card.card_instance_id for entry in match.stack
-    ]
+def test_the_view_has_no_stack_key(view: PlayerView) -> None:
+    """O feitiço resolve na hora: a visão não oferece ao cliente o campo de
+    feitiços pendentes que existiu até a feature 008."""
+    assert "stack" not in view
 
 
 def test_the_view_is_the_same_from_the_other_side(match: Match) -> None:

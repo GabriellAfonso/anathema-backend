@@ -128,14 +128,6 @@ def test_the_unit_enters_ready_and_undamaged() -> None:
     assert unit.modifiers == []
 
 
-def test_playing_a_unit_does_not_use_the_stack() -> None:
-    match = match_with_hand([CHEAP_UNIT.card_id])
-
-    play(match)
-
-    assert match.stack == []
-
-
 def test_playing_a_unit_resets_the_consecutive_passes() -> None:
     match = match_with_hand([CHEAP_UNIT.card_id])
     match.consecutive_passes = 1

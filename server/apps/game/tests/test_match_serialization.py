@@ -3,7 +3,7 @@
 O que o `MatchStore` grava no Redis precisa reconstruir a mesma partida em
 outro worker do uvicorn. Zona vazia passa em qualquer serialização, então o
 estado sob teste é o de `fake_match_in_progress`: todas as zonas ocupadas,
-dano, modificadores das duas durações e pilha com dois feitiços.
+dano e modificadores das duas durações.
 """
 
 import json
@@ -68,7 +68,7 @@ def test_the_document_is_stable_across_the_round_trip(match: Match) -> None:
 
 
 def test_deck_order_is_preserved(match: Match) -> None:
-    """O deck é uma pilha de compra: a ordem é a regra, não decoração."""
+    """O deck é um monte de compra: a ordem é a regra, não decoração."""
     before = [card.card_instance_id for card in match.player(PLAYER_ONE).deck]
 
     after = [
@@ -78,11 +78,11 @@ def test_deck_order_is_preserved(match: Match) -> None:
     assert after == before
 
 
-def test_stack_order_is_preserved(match: Match) -> None:
-    """A pilha resolve em LIFO: inverter a ordem inverteria o jogo (§6)."""
-    before = [entry.card.card_instance_id for entry in match.stack]
-
-    assert [entry.card.card_instance_id for entry in round_trip(match).stack] == before
+def test_the_document_has_no_stack_key(match: Match) -> None:
+    """O feitiço resolve na hora (Fluxo de Partida, corrigido em 2026-09-11),
+    e a forma gravada não carrega o campo de feitiços pendentes que existiu até a
+    feature 008."""
+    assert "stack" not in to_match_document(match)
 
 
 def test_accumulated_damage_survives(match: Match) -> None:
@@ -128,18 +128,6 @@ def test_the_instance_counter_survives(match: Match) -> None:
 
 def test_the_phase_comes_back_as_the_enum(match: Match) -> None:
     assert round_trip(match).phase is MatchPhase.ACTION
-
-
-def test_a_targeted_spell_keeps_its_target(match: Match) -> None:
-    target = match.stack[0].target_card_instance_id
-
-    assert round_trip(match).stack[0].target_card_instance_id == target
-
-
-def test_an_untargeted_spell_stays_untargeted(match: Match) -> None:
-    """`None` é ausência de alvo, e precisa ser distinguível de um alvo que
-    sumiu."""
-    assert round_trip(match).stack[1].target_card_instance_id is None
 
 
 def test_the_two_players_keep_their_order(match: Match) -> None:

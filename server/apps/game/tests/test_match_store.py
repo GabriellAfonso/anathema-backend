@@ -61,7 +61,7 @@ async def saved_new_match(store: MatchStore) -> Match:
 async def saved_in_progress(store: MatchStore) -> Match:
     """Uma partida com todas as zonas ocupadas, já gravada.
 
-    A partida do setup tem deck e mão, mas não tem banco, cemitério, pilha nem
+    A partida do setup tem deck e mão, mas não tem banco, cemitério nem
     modificador -- e zona vazia passa em qualquer serialização.
     """
     match = fake_match_in_progress()
@@ -179,13 +179,12 @@ async def test_a_full_match_comes_back_identical(store: MatchStore) -> None:
 
 
 async def test_card_identity_survives_the_round_trip(store: MatchStore) -> None:
-    """Sem isto, um alvo na pilha apontaria para outra carta depois de a
-    partida passar pelo Redis."""
+    """Sem isto, o alvo de um feitiço ou de um bloqueio apontaria para outra
+    carta depois de a partida passar pelo Redis."""
     match = await saved_in_progress(store)
 
     reloaded = await stored_match(store, match)
-    target = match.stack[0].target_card_instance_id
-    assert target is not None
+    target = match.players[0].bank[0].card.card_instance_id
 
     assert reloaded.bank_unit(target) is not None
 

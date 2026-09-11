@@ -64,15 +64,15 @@ def test_minted_identifiers_are_never_reused(match: Match) -> None:
 
 
 def test_no_identifier_repeats_across_the_two_players() -> None:
-    """O espaço é único na partida, não um por jogador: a pilha guarda o alvo
-    como um número solto e ele não pode ser ambíguo."""
+    """O espaço é único na partida, não um por jogador: a ação e o combate
+    guardam o alvo como um número solto, e ele não pode ser ambíguo."""
     match = fake_match_in_progress()
 
     assert len(_all_identifiers(match)) == len(set(_all_identifiers(match)))
 
 
 def test_the_identifier_survives_every_zone_change(match: Match) -> None:
-    """Deck, mão, banco, pilha e cemitério: o mesmo número nas cinco."""
+    """Deck, mão, banco e cemitério: o mesmo número nas quatro."""
     player = match.players[0]
     player.deck = fake_cards(match, [KRONOS])
     born = player.deck[0].card_instance_id
@@ -118,8 +118,8 @@ def test_a_card_in_hand_has_nowhere_to_carry_damage(match: Match) -> None:
 
 
 def _all_identifiers(match: Match) -> list[CardInstanceId]:
-    """Todo identificador vivo na partida, nas cinco zonas dos dois lados."""
-    identifiers = [entry.card.card_instance_id for entry in match.stack]
+    """Todo identificador vivo na partida, nas quatro zonas dos dois lados."""
+    identifiers: list[CardInstanceId] = []
 
     for player in match.players:
         loose = player.deck + player.hand + player.graveyard

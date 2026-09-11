@@ -107,7 +107,6 @@ def test_two_matches_do_not_share_an_id(catalog: CardCatalog, deck: Deck) -> Non
 
 
 def test_the_other_zones_start_empty(match: Match) -> None:
-    assert match.stack == []
     assert match.round_number == 1
     assert match.consecutive_passes == 0
 
