@@ -62,9 +62,12 @@ async def open_socket(
 
 
 def state_of(frame: dict[str, object]) -> dict[str, object]:
+    """A visão dentro do `match_start`, que desde a feature 009 vem junto da
+    versão de escrita: `{"version": ..., "view": ...}`."""
     assert frame["type"] == "match_start"
+    payload = cast(dict[str, object], frame["payload"])
 
-    return cast(dict[str, object], frame["payload"])
+    return cast(dict[str, object], payload["view"])
 
 
 def side(state: dict[str, object], key: str) -> dict[str, object]:
@@ -128,8 +131,8 @@ async def test_reconnecting_returns_the_same_state(
 ) -> None:
     """O caso que a feature inteira existe para atender.
 
-    Sem mensagem `resync` e sem versionamento: o segundo socket é igual ao
-    primeiro, e o servidor responde a mesma partida.
+    Sem mensagem `resync`: o segundo socket é igual ao primeiro, e o servidor
+    responde a mesma partida, na mesma versão.
     """
     first, opening = await open_socket(matches, PLAYER_ONE, match.match_id)
     await first.disconnect()
