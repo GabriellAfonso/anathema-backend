@@ -4,13 +4,13 @@
 
 **Created**: 2026-09-11
 
-**Status**: Draft — pausada até a feature 008 (feitiço imediato)
+**Status**: Draft — revisada em 2026-09-11
 
-> [!warning] Pausada
-> Escrita antes da correção de 2026-09-11 do Fluxo de Partida, que removeu a
-> pilha: feitiço resolve na hora. Esta spec ainda cita pilha, fizzle e feitiço
-> imediato do defensor como ação separada. Revisar depois que a feature 008
-> tirar a pilha do motor.
+> [!note] Revisão
+> Escrita antes das duas correções do Fluxo de Partida de 2026-09-11, e revisada
+> depois de o motor recebê-las: não existe pilha (feitiço resolve na hora e não
+> gasta a vez), declarar ataque abre uma janela de declaração, existe
+> desistência e não existe empate, e a energia acumula.
 
 **Input**: User description: "Protocolo de partida: ligar o motor ao websocket. Receber as jogadas do cliente, passá-las pelo motor, gravar, e mandar a cada jogador a partida como ele pode vê-la."
 
@@ -19,11 +19,12 @@
 > os localizam por esses nomes. O conteúdo segue em português, como o resto das
 > notas do projeto.
 
-Referência de domínio: `Game/Fluxo de Partida.md` no vault. Esta feature não
-acrescenta regra nenhuma: a §3 (mulligan), a §4 a §8 (rodada, pilha, combate) e
-a §10 (vitória) são consumidas como as features 003 a 007 as entregaram. A §13
-registra o timeout de jogada como "problema de transporte, não de regra" — ele
-continua fora, e fica para a feature de timers.
+Referência de domínio: `Game/Fluxo de Partida.md` no vault, na versão corrigida
+em 2026-09-11. Esta feature não acrescenta regra nenhuma: a §3 (mulligan), a §4
+a §8 (rodada, feitiço imediato, declaração, defesa, combate), a §10 (vitória e
+desistência) e a §14 (feitiços com regra própria) são consumidas como o motor as
+entrega. A §15 (relógio da vez) é problema de transporte, e fica para a feature
+de timers, logo depois desta.
 
 Hoje o motor está completo e testado de ponta a ponta sem rede, e nenhum
 cliente consegue jogar uma carta. O socket de partida autentica, confere o
@@ -97,8 +98,9 @@ adicional.
 ### User Story 2 - Jogar a partida: cada jogada aceita chega aos dois, cada um a sua (Priority: P1)
 
 Com a partida em andamento, quem tem a prioridade manda uma ação: jogar
-unidade, lançar feitiço, passar ou declarar ataque; na janela do defensor,
-atribuir bloqueador, remover bloqueador, lançar feitiço imediato ou encerrar a
+unidade, jogar feitiço, passar ou declarar ataque; na declaração, mandar mais
+atacantes, puxar atacante de volta, jogar feitiço ou **Atacar**; na janela do
+defensor, atribuir bloqueador, remover bloqueador, jogar feitiço ou encerrar a
 janela.
 
 O autor da jogada é **sempre** o usuário autenticado daquele socket. A mensagem
@@ -106,18 +108,17 @@ não diz quem age, e se disser, é ignorado.
 
 Aceita a jogada, os dois jogadores recebem a partida atualizada — cada um a
 própria visão — junto da descrição pública do que aconteceu. Uma cascata
-inteira — os dois passam, a pilha resolve, a rodada vira, o Upkeep compra —
-chega como **uma** atualização, com o estado já estabilizado.
+inteira — os dois passam, a rodada vira, o Upkeep dá energia e compra — chega
+como **uma** atualização, com o estado já estabilizado.
 
 **Why this priority**: é a feature. Sem isto o motor completo continua
 inalcançável por qualquer cliente.
 
 **Independent Test**: com uma partida na Fase de Ação, mandar pelo socket de
-quem tem a prioridade uma unidade, depois um feitiço do oponente em resposta,
-depois dois passes; conferir que cada jogada aceita produz exatamente uma
-atualização em cada socket, que cada visão contém a mão do próprio dono e só o
-tamanho da mão do outro, e que a última atualização já chega com a pilha
-resolvida.
+quem tem a prioridade um feitiço e uma unidade, depois um passe de cada lado;
+conferir que cada jogada aceita produz exatamente uma atualização em cada
+socket, que cada visão contém a mão do próprio dono e só o tamanho da mão do
+outro, e que a última atualização já chega na rodada seguinte.
 
 **Acceptance Scenarios**:
 
@@ -132,18 +133,24 @@ resolvida.
 4. **Given** B sem prioridade, **When** B manda uma jogada cujo payload traz o
    `user_id` de A como autor, **Then** B recebe a recusa de prioridade e a
    partida não muda.
-5. **Given** A lançou um feitiço e B passou, **When** A passa, **Then** os dois
-   recebem uma única atualização, com a pilha já resolvida e a partida de volta
-   à Fase de Ação.
-6. **Given** a pilha vazia e um passe já dado, **When** o segundo jogador
-   passa, **Then** os dois recebem uma única atualização, já na Fase de Ação da
+5. **Given** A com prioridade e SUMMONED AX na mão, **When** A joga o feitiço
+   numa unidade de B, **Then** os dois recebem uma única atualização, com o dano
+   já na unidade e a vez ainda com A.
+6. **Given** um passe já dado, **When** o segundo jogador passa, **Then** os dois recebem uma única atualização, já na Fase de Ação da
    rodada seguinte, com o Upkeep executado.
-7. **Given** o dono do token declara ataque, **When** o defensor atribui dois
-   bloqueadores, lança um feitiço imediato e encerra a janela, **Then** cada
-   uma dessas quatro jogadas produz uma atualização nos dois sockets, e a
-   última chega com o dano e a limpeza já feitos.
-8. **Given** uma jogada que leva um Nexus a 0, **When** ela é aceita, **Then**
-   os dois recebem a partida terminada com o resultado.
+7. **Given** o dono do token declara ataque com uma unidade, **When** ele
+   manda outra, puxa a primeira de volta e confirma **Atacar**, **Then** cada
+   uma dessas jogadas produz uma atualização nos dois sockets, e o defensor só
+   recebe a vez na última.
+8. **Given** a janela do defensor aberta, **When** o defensor atribui um
+   bloqueador, joga um feitiço e encerra a janela, **Then** cada jogada produz
+   uma atualização nos dois sockets, e a última chega com o dano e a limpeza já
+   feitos.
+9. **Given** uma jogada que leva um Nexus a 0, **When** ela é aceita, **Then**
+   os dois recebem a partida terminada com o resultado e o motivo.
+10. **Given** uma partida em qualquer fase, inclusive no mulligan, **When** um
+   jogador manda desistir pelo socket, na vez dele ou não, **Then** os dois
+   recebem a partida terminada, com ele derrotado e o motivo de desistência.
 
 ---
 
@@ -202,9 +209,9 @@ visão ao conectar, atualização, descrição do que aconteceu, e recusa. Nenhu
 contém a mão do oponente, nem o conteúdo ou a ordem de nenhum deck.
 
 A descrição pública segue a mesma fronteira: carta jogada, feitiço lançado,
-bloqueio atribuído e ataque declarado são públicos; o mulligan do oponente
-revela só quantas cartas ele trocou; uma compra do oponente revela só que ele
-comprou.
+atacante mandado ou puxado de volta, ataque confirmado, bloqueio atribuído e
+desistência são públicos; o mulligan do oponente revela só quantas cartas ele
+trocou; uma compra do oponente revela só que ele comprou.
 
 **Why this priority**: é o requisito de segurança do jogo. Um vazamento aqui
 não aparece em nenhum teste de regra, e entrega a partida a quem ler o tráfego.
@@ -237,8 +244,8 @@ ou no deck de B — nem o `card_id` correspondente —, e vice-versa.
 ### User Story 5 - Reconectar em qualquer ponto devolve o estado atual (Priority: P2)
 
 Reconectar continua sendo conectar de novo e receber a visão atual, em qualquer
-momento da partida: durante o mulligan, com a pilha cheia, com o combate
-aberto, ou depois do fim.
+momento da partida: durante o mulligan, com a declaração aberta, com a
+janela do defensor aberta, ou depois do fim.
 
 A visão passa a bastar para o jogador saber o que se espera dele. Hoje ela não
 diz se o mulligan **daquele** jogador já foi enviado: quem reconecta durante a
@@ -250,8 +257,8 @@ oponente a visão revela só se ele já respondeu ou não.
 do mulligan. É P2 porque o fluxo feliz não depende dela.
 
 **Independent Test**: em cada um dos pontos — nenhum mulligan enviado, só o
-próprio enviado, só o do oponente enviado, pilha com feitiço, combate aberto,
-partida terminada — derrubar o socket, reconectar, e conferir que a visão
+próprio enviado, só o do oponente enviado, declaração aberta, janela do
+defensor aberta, partida terminada — derrubar o socket, reconectar, e conferir que a visão
 recebida é a do estado gravado e diz corretamente o que se espera do jogador.
 
 **Acceptance Scenarios**:
@@ -262,12 +269,12 @@ recebida é a do estado gravado e diz corretamente o que se espera do jogador.
 2. **Given** a mesma partida, **When** B reconecta, **Then** a visão de B diz
    que o mulligan dele não foi enviado e que o oponente já respondeu, sem dizer
    quantas nem quais cartas A trocou.
-3. **Given** um feitiço na pilha, **When** um jogador reconecta, **Then** a
-   visão traz a pilha e a prioridade atuais.
-4. **Given** um combate aberto, **When** o defensor reconecta, **Then** a visão
-   traz os atacantes e os bloqueios atribuídos até ali.
+3. **Given** a declaração aberta, **When** o atacante reconecta, **Then** a
+   visão traz a fase de declaração, a zona de ataque e a vez com ele.
+4. **Given** a janela do defensor aberta, **When** o defensor reconecta,
+   **Then** a visão traz os atacantes e os bloqueios atribuídos até ali.
 5. **Given** uma partida terminada, **When** um jogador reconecta, **Then** a
-   visão traz o resultado.
+   visão traz o resultado e o motivo.
 
 ---
 
@@ -318,7 +325,7 @@ mesmo jogador, jogar por um, e conferir a atualização nos dois.
 ### User Story 7 - Uma partida inteira pela rede, do pareamento ao resultado (Priority: P3)
 
 Dois clientes autenticados saem do `match_found`, enviam o mulligan, entram na
-Rodada 1 sem mensagem extra, alternam unidades, feitiços, respostas na pilha e
+Rodada 1 sem mensagem extra, alternam unidades, feitiços, declarações e
 combates até um Nexus chegar a zero, e recebem o resultado. Dali em diante toda
 jogada é recusada.
 
@@ -370,6 +377,10 @@ a visão de cada um e, no fim, o resultado e a recusa de uma jogada a mais.
 - **Jogada durante o mulligan**: recusa com o código da recusa que o motor
   der. A ordem das guardas do motor é contrato da feature 005 e não muda para
   caber no protocolo.
+- **Desistência fora da vez ou no mulligan**: aceita — a §10 permite desistir a
+  qualquer momento. Depois do fim, recusa de partida terminada.
+- **SACRIFICIAL FIRE fora da declaração**: bem formado; recusa do motor com o
+  código dele.
 - **Jogada sobre estado velho**: avaliada contra o estado gravado agora. Se
   continua legal, é aceita; se não, recusada como qualquer outra.
 - **Disputa perdida na gravação**: a jogada é reavaliada contra o estado que a
@@ -408,10 +419,14 @@ a visão de cada um e, no fim, o resultado e a recusa de uma jogada a mais.
 
 - **FR-001**: O socket de partida MUST aceitar, do cliente, a escolha de
   mulligan: a lista das cartas da própria mão a trocar, de nenhuma a todas.
-- **FR-002**: O socket de partida MUST aceitar, do cliente, cada uma das oito
-  ações que o motor aceita: jogar unidade, lançar feitiço, passar, declarar
-  ataque, atribuir bloqueador, remover bloqueador, lançar feitiço imediato e
-  encerrar a janela do defensor. Nenhuma ação a mais, nenhuma a menos.
+- **FR-002**: O socket de partida MUST aceitar, do cliente, cada uma das nove
+  ações que o motor aceita: jogar unidade, jogar feitiço, passar, declarar
+  ataque (e mandar mais atacantes), puxar atacante de volta, **Atacar**,
+  atribuir bloqueador, remover bloqueador e encerrar a janela do defensor.
+  Nenhuma ação a mais, nenhuma a menos.
+- **FR-002a**: O socket de partida MUST aceitar a desistência do dono do
+  socket a qualquer momento da partida, na vez dele ou não, inclusive no
+  mulligan.
 - **FR-003**: Toda carta citada numa mensagem MUST ser citada pelo
   identificador de instância da partida, nunca pelo `card_id` do catálogo.
 - **FR-004**: O autor de toda jogada MUST ser o usuário autenticado do socket
@@ -448,11 +463,12 @@ a visão de cada um e, no fim, o resultado e a recusa de uma jogada a mais.
   atualização.
 - **FR-014**: A descrição do que aconteceu MUST cobrir a jogada aceita **e** o
   que ela causou em seguida — efeito de feitiço, unidades que morreram, dano
-  de combate, virada de rodada, compras do Upkeep e da compensação, fim da
-  partida —, cada item recortado pelo que aquele jogador pode ver.
-- **FR-015**: Carta jogada, feitiço lançado (com o alvo), ataque declarado (com
-  os atacantes), bloqueio atribuído e bloqueio removido MUST ser descritos aos
-  dois jogadores por inteiro.
+  de combate, virada de rodada, energia e compras do Upkeep, compra da
+  compensação, fim da partida —, cada item recortado pelo que aquele jogador
+  pode ver.
+- **FR-015**: Carta jogada, feitiço lançado (com o alvo), atacante mandado ou
+  puxado de volta, ataque confirmado, bloqueio atribuído, bloqueio removido e
+  desistência MUST ser descritos aos dois jogadores por inteiro.
 - **FR-016**: O mulligan do oponente MUST ser descrito só pela quantidade de
   cartas trocadas. O próprio mulligan MAY ser descrito por inteiro ao autor.
 - **FR-017**: Uma compra do oponente MUST ser descrita só como o fato de que
@@ -460,8 +476,8 @@ a visão de cada um e, no fim, o resultado e a recusa de uma jogada a mais.
 - **FR-018**: Uma cascata inteira MUST chegar a cada socket como **uma**
   atualização, com o estado já estabilizado. Nenhum estado intermediário da
   cascata MUST ser entregue.
-- **FR-019**: Uma jogada que termina a partida MUST entregar aos dois a partida
-  terminada com o resultado.
+- **FR-019**: Uma jogada ou desistência que termina a partida MUST entregar
+  aos dois a partida terminada com o resultado: quem perdeu e o motivo.
 - **FR-020**: Cada atualização e a visão enviada ao conectar MUST carregar uma
   indicação de sua posição na sequência de mudanças gravadas da partida, de
   modo que o cliente identifique a mais recente entre duas.
@@ -537,8 +553,8 @@ a visão de cada um e, no fim, o resultado e a recusa de uma jogada a mais.
 
 ### Key Entities
 
-- **Mensagem de jogada**: o que o cliente manda. Uma espécie (mulligan ou uma
-  das oito ações) e os campos daquela espécie — identificadores de instância de
+- **Mensagem de jogada**: o que o cliente manda. Uma espécie (mulligan,
+  desistência, ou uma das nove ações) e os campos daquela espécie — identificadores de instância de
   carta, e nada que diga quem age.
 - **Recusa**: resposta a uma mensagem que não virou mudança. Código estável,
   mensagem legível, destinada a um socket só. Duas famílias: de forma e de
@@ -572,8 +588,8 @@ a visão de cada um e, no fim, o resultado e a recusa de uma jogada a mais.
 - **SC-005**: 100% das espécies de recusa do motor têm código próprio, e 0 pares
   de espécies diferentes compartilham código.
 - **SC-006**: Reconectar em cada um dos seis pontos — nenhum mulligan enviado,
-  só o próprio, só o do oponente, pilha com feitiço, combate aberto, partida
-  terminada — devolve o estado gravado e o que se espera do jogador, em 100%
+  só o próprio, só o do oponente, declaração aberta, janela do defensor aberta,
+  partida terminada — devolve o estado gravado e o que se espera do jogador, em 100%
   das tentativas.
 - **SC-007**: Em 100 repetições de mulligans simultâneos em workers diferentes,
   100 partidas chegam à Rodada 1 com os dois mulligans aplicados.
@@ -610,11 +626,14 @@ a visão de cada um e, no fim, o resultado e a recusa de uma jogada a mais.
   aceita.
 - **Decks continuam vindo do `starter_deck`.** Deck em banco e escolha de deck
   na fila ficam fora.
-- **Fora de escopo**: timeout de jogada, jogador ausente, abandono, aviso de
-  oponente desconectado (feature de timers); histórico, ranking, recompensa, e
+- **Fora de escopo**: o relógio da vez da §15 — aviso aos 30s, estouro aos
+  45s, a ação automática de cada fase e o relógio do mulligan —, jogador
+  ausente, abandono e aviso de oponente desconectado (feature de timers, logo
+  depois desta); histórico, ranking, recompensa, e
   qualquer destino da partida terminada além de recusar jogadas até expirar;
   espectadores; código do cliente; limite de taxa de mensagens.
 - **Dependências**: a gravação atômica de partida (feature 003), a visão por
   jogador com ocultação por tipo (feature 002), a porta única de ação e a
-  cascata (feature 005), a pilha (006), o combate (007), e os gates de entrada
-  e o envelope dos consumers existentes.
+  cascata (feature 005), o feitiço imediato (008), a segunda correção da nota
+  (energia, declaração, desistência, regra própria de feitiços), o combate
+  (007), e os gates de entrada e o envelope dos consumers existentes.

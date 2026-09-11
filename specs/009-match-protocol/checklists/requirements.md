@@ -31,10 +31,10 @@
 
 ## Notes
 
-- **Spec pausada.** A conversa de especificação revelou que o Fluxo de Partida
-  estava errado: não existe pilha, feitiço resolve na hora. A nota foi corrigida
-  em 2026-09-11, e a remoção da pilha do motor virou a feature 008. Esta spec
-  precisa ser revisada depois dela — ainda cita pilha e fizzle.
+- **Spec revisada em 2026-09-11**, depois de o motor receber as duas correções
+  da nota: sem pilha, com janela de declaração, desistência, resultado com
+  motivo e energia que acumula. O relógio da vez (§15) ficou fora, e é a
+  feature seguinte.
 - FR-014 resolvido com o dono do produto: o relato inclui o que a jogada
   causou, cada item recortado por visibilidade. Exige que o motor relate o que
   fez, uma porta pública nova.
