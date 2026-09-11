@@ -80,6 +80,26 @@ class StackEntryDocument(TypedDict):
     target_card_instance_id: int | None
 
 
+class BlockAssignmentDocument(TypedDict):
+    """Um par do bloqueio da §7.2.
+
+    Par, e não uma entrada de objeto `{"4": 3}`: chave de JSON é sempre string,
+    e um objeto indexado por identificador de carta precisaria da conversão de
+    volta que o cabeçalho deste módulo existe para não ter.
+    """
+
+    blocker_card_instance_id: int
+    attacker_card_instance_id: int
+
+
+class CombatDocument(TypedDict):
+    """O combate em curso. `blocks` vazia é combate sem bloqueador nenhum; sem
+    combate é `MatchDocument["combat"] is None`, que é outro fato."""
+
+    attacker_card_instance_ids: list[int]
+    blocks: list[BlockAssignmentDocument]
+
+
 class PlayerDocument(TypedDict):
     profile: PlayerData
     nexus: int
@@ -113,6 +133,10 @@ class MatchDocument(TypedDict):
     # antes do sorteio da §3. Anda junto de `phase == "finished"`.
     outcome: MatchOutcomeDocument | None
     stack: list[StackEntryDocument]
+    # `None` fora da §7. Obrigatória e anulável, e não ausente: `total=False`
+    # tornaria **todo** o documento opcional, que é o argumento que `outcome`
+    # já usou.
+    combat: CombatDocument | None
     consecutive_passes: int
     next_card_instance_id: int
     # `RandomSeed` é `str` em tempo de execução; a volta reembrulha, como

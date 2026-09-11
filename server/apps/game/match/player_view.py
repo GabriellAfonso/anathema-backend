@@ -19,6 +19,7 @@ from apps.players.services.player_queries import PlayerData
 from .documents import (
     BankUnitDocument,
     CardDocument,
+    CombatDocument,
     MatchOutcomeDocument,
     StackEntryDocument,
 )
@@ -27,6 +28,7 @@ from .player_state import PlayerState
 from .serialization import (
     to_bank_unit_document,
     to_card_document,
+    to_combat_document,
     to_match_outcome_document,
     to_stack_entry_document,
 )
@@ -79,6 +81,10 @@ class PlayerView(TypedDict):
     # ele o cliente teria o estado terminal e não teria o resultado.
     outcome: MatchOutcomeDocument | None
     stack: list[StackEntryDocument]
+    # `None` fora da §7. Aparece inteiro para os dois lados: quem ataca quem é
+    # fato revelado, como a pilha -- sem ele o cliente não tem como desenhar o
+    # combate. Esconder seria esconder do defensor a própria declaração dele.
+    combat: CombatDocument | None
     you: PlayerSideView
     opponent: OpponentSideView
 
@@ -102,6 +108,7 @@ def build_player_view(match: Match, user_id: int) -> PlayerView:
         "consecutive_passes": match.consecutive_passes,
         "outcome": to_match_outcome_document(match.outcome),
         "stack": [to_stack_entry_document(entry) for entry in match.stack],
+        "combat": to_combat_document(match.combat),
         "you": _own_side(match.player(user_id)),
         "opponent": _opponent_side(match.opponent_of(user_id)),
     }

@@ -16,6 +16,7 @@ from enum import StrEnum
 from apps.game.randomness import RandomSeed, Roll
 
 from .cards_in_play import BankUnit, CardInstanceId
+from .combat_state import CombatState
 from .match_outcome import MatchOutcome
 from .player_state import PlayerState
 from .spell_stack import StackEntry
@@ -29,8 +30,12 @@ class MatchPhase(StrEnum):
     partida já existe e já está gravada e o setup espera os dois jogadores
     decidirem. Uma partida sai dela quando o segundo responde e nunca volta.
 
-    `COMBAT` existe desde já, mas o estado que o combate precisa — o
-    pareamento de bloqueadores da §7.2 — entra na feature de combate.
+    `COMBAT` é a única fase que **espera** jogador sem ser a Fase de Ação, e
+    por isso está fora do conjunto de fases automáticas da cascata: a partida
+    para nela esperando o defensor, e quem a atravessa é a ação que encerra a
+    janela. É também a única em que a prioridade não troca depois de agir —
+    ver `keeps_priority` em `engine/player_action.py`. O pareamento que ela
+    precisa mora em `Match.combat`.
 
     `FINISHED` também não é fase do ciclo: é o outro lado da partida, o da §10.
     É **terminal** — nenhuma transição sai dela — e está fora de
@@ -61,6 +66,31 @@ class NotAParticipantError(Exception):
             f"expected the user_id of one of its two players"
         )
         self.user_id = user_id
+        self.match_id = match_id
+
+
+class MatchIsNotInCombatError(Exception):
+    """Pediram o combate de uma partida que não está em combate.
+
+    É erro de programação, não fluxo normal: as regras da §7.2 e da §7.3 só
+    são alcançáveis de `MatchPhase.COMBAT`, e a guarda de fase já provou isso
+    antes de qualquer uma delas perguntar.
+
+    Não herda de `IllegalActionError` pela mesma razão que
+    `NotAParticipantError` não herda: ela mora aqui, e herdar inverteria a
+    dependência entre o pacote de estado e o de regra.
+
+    >>> raise MatchIsNotInCombatError(MatchPhase.ACTION, "m-1")
+    MatchIsNotInCombatError: match 'm-1' is in phase 'action': expected
+    'combat' to have a combat in progress
+    """
+
+    def __init__(self, phase: MatchPhase, match_id: str) -> None:
+        super().__init__(
+            f"match {match_id!r} is in phase '{phase}': "
+            f"expected '{MatchPhase.COMBAT}' to have a combat in progress"
+        )
+        self.phase = phase
         self.match_id = match_id
 
 
@@ -105,6 +135,15 @@ class Match:
     outcome: MatchOutcome | None = None
     # Fim da lista é o topo: `append` empilha, e a resolução é LIFO (§6).
     stack: list[StackEntry] = field(default_factory=list)
+    # `None` é "não há combate", e não valor de espera: fora da §7 não existe
+    # pareamento, e um `CombatState` vazio permanente confundiria "ninguém
+    # bloqueou" com "ninguém atacou".
+    #
+    # Anda junto de `phase is COMBAT`, mas só numa direção: uma partida que
+    # acaba **dentro** da janela do defensor fica em `FINISHED` com o combate
+    # intacto, e é esse estado congelado que registra que o combate foi
+    # interrompido em vez de resolvido.
+    combat: CombatState | None = None
     consecutive_passes: int = 0
     # Contador de identidade de carta. Campo do estado, e não do processo,
     # porque a partida é lida por qualquer worker do uvicorn: um contador de
@@ -219,6 +258,26 @@ class Match:
                 return found
 
         return None
+
+    def ongoing_combat(self) -> CombatState:
+        """O combate em curso, ou recusa citando a fase.
+
+        Mesma forma e mesma razão de `player()`: perguntar por um combate que
+        não existe é bug de chamador, e as três regras da §7 que precisam do
+        estreitamento escreveriam a mesma recusa três vezes se ele não morasse
+        aqui.
+
+        Diverge de `bank_unit()`, que devolve `None`, porque as perguntas são
+        diferentes: um alvo que sumiu é o caso normal da §6; uma partida fora
+        do combate chegando à §7.2 não é.
+
+        >>> match.ongoing_combat().attacker_card_instance_ids
+        [3, 5]
+        """
+        if self.combat is None:
+            raise MatchIsNotInCombatError(self.phase, self.match_id)
+
+        return self.combat
 
     def mint_card_instance_id(self) -> CardInstanceId:
         """Cunha o próximo identificador de carta desta partida.

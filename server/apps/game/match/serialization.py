@@ -7,16 +7,19 @@ aqui, não dentro de `BankUnit`.
 Garantia: para qualquer estado válido,
 `match_from_document(json.loads(json.dumps(to_match_document(match))))` é
 igual ao original -- identificadores, contador, ordem do deck, ordem da pilha,
-dano acumulado e modificadores inclusive.
+dano acumulado, modificadores e o pareamento de bloqueadores da §7.2 inclusive.
 """
 
 from apps.game.cards import CardId, EffectDuration
 from apps.game.randomness import RandomSeed
 
 from .cards_in_play import BankUnit, CardInstanceId, MatchCard
+from .combat_state import BlockAssignment, CombatState
 from .documents import (
     BankUnitDocument,
+    BlockAssignmentDocument,
     CardDocument,
+    CombatDocument,
     MatchDocument,
     MatchOutcomeDocument,
     ModifierDocument,
@@ -52,6 +55,7 @@ def to_match_document(match: Match) -> MatchDocument:
         "phase": match.phase,
         "outcome": to_match_outcome_document(match.outcome),
         "stack": [to_stack_entry_document(entry) for entry in match.stack],
+        "combat": to_combat_document(match.combat),
         "consecutive_passes": match.consecutive_passes,
         "next_card_instance_id": match.next_card_instance_id,
         "random_seed": match.random_seed,
@@ -77,6 +81,7 @@ def match_from_document(document: MatchDocument) -> Match:
         phase=MatchPhase(document["phase"]),
         outcome=match_outcome_from_document(document["outcome"]),
         stack=[stack_entry_from_document(entry) for entry in document["stack"]],
+        combat=combat_from_document(document["combat"]),
         consecutive_passes=document["consecutive_passes"],
         next_card_instance_id=document["next_card_instance_id"],
         random_seed=RandomSeed(document["random_seed"]),
@@ -179,6 +184,50 @@ def stack_entry_from_document(document: StackEntryDocument) -> StackEntry:
         card=card_from_document(document["card"]),
         caster_user_id=document["caster_user_id"],
         target_card_instance_id=None if target is None else CardInstanceId(target),
+    )
+
+
+def to_combat_document(combat: CombatState | None) -> CombatDocument | None:
+    """`None` atravessa como `None`: partida fora da §7 não tem combate.
+
+    Mesma forma de `to_match_outcome_document`, e pela mesma razão.
+    """
+    if combat is None:
+        return None
+
+    return {
+        "attacker_card_instance_ids": list(combat.attacker_card_instance_ids),
+        "blocks": [to_block_assignment_document(block) for block in combat.blocks],
+    }
+
+
+def combat_from_document(document: CombatDocument | None) -> CombatState | None:
+    """A volta reembrulha os inteiros em `CardInstanceId`, como
+    `card_from_document` já faz."""
+    if document is None:
+        return None
+
+    return CombatState(
+        attacker_card_instance_ids=[
+            CardInstanceId(one) for one in document["attacker_card_instance_ids"]
+        ],
+        blocks=[block_assignment_from_document(one) for one in document["blocks"]],
+    )
+
+
+def to_block_assignment_document(block: BlockAssignment) -> BlockAssignmentDocument:
+    return {
+        "blocker_card_instance_id": block.blocker_card_instance_id,
+        "attacker_card_instance_id": block.attacker_card_instance_id,
+    }
+
+
+def block_assignment_from_document(
+    document: BlockAssignmentDocument,
+) -> BlockAssignment:
+    return BlockAssignment(
+        blocker_card_instance_id=CardInstanceId(document["blocker_card_instance_id"]),
+        attacker_card_instance_id=CardInstanceId(document["attacker_card_instance_id"]),
     )
 
 
