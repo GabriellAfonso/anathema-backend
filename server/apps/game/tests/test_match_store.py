@@ -15,12 +15,15 @@ from redis.asyncio import Redis
 
 from apps.game.engine import record_mulligan
 from apps.game.match import Match, MatchPhase, build_player_view
+from apps.game.cards import mvp_catalog
 from apps.game.match.store import (
     MATCH_TTL_SECONDS,
     ConcurrentMatchWriteError,
+    MatchChange,
     MatchNotFoundError,
     MatchStore,
 )
+from apps.game.protocol import MulliganCommand, apply_command
 from apps.game.tests.fake_match_state import fake_match_in_progress
 from apps.game.tests.fake_random_source import ScriptedRandomSource
 from apps.game.tests.fake_setup import fake_started_match
@@ -39,7 +42,7 @@ class AlwaysStaleMatchStore(MatchStore):
 
     async def _swap_state(
         self, match_id: str, version: bytes | str, match: Match
-    ) -> bool:
+    ) -> int:
         await self.save(match)
 
         return await super()._swap_state(match_id, version, match)
@@ -240,6 +243,39 @@ async def test_mutate_applies_the_change_and_stores_it(store: MatchStore) -> Non
     )
 
 
+async def test_save_returns_the_first_version(store: MatchStore) -> None:
+    match = fake_started_match(PLAYER_ONE, PLAYER_TWO)
+
+    assert await store.save(match) == 1
+
+
+async def test_get_stored_reads_the_match_and_its_version(store: MatchStore) -> None:
+    match = await saved_new_match(store)
+
+    stored = await store.get_stored(match.match_id)
+
+    assert stored is not None
+    assert (stored.match, stored.version) == (match, 1)
+
+
+async def test_get_stored_of_an_unknown_match_is_none(store: MatchStore) -> None:
+    assert await store.get_stored("no-such-match") is None
+
+
+async def test_mutate_returns_the_written_match_and_version(
+    store: MatchStore,
+) -> None:
+    """A versão devolvida é a posição da mudança que o socket de partida manda
+    ao cliente (feature 009)."""
+    match = await saved_new_match(store)
+
+    first = await store.mutate(match.match_id, _bump_passes)
+    second = await store.mutate(match.match_id, _bump_passes)
+
+    assert (first.version, second.version) == (2, 3)
+    assert second.match.consecutive_passes == 2
+
+
 async def test_mutate_of_an_unknown_match_is_refused(store: MatchStore) -> None:
     with pytest.raises(MatchNotFoundError, match="no-such-match"):
         await store.mutate("no-such-match", lambda live: None)
@@ -328,6 +364,39 @@ async def test_two_concurrent_mulligans_both_land(store: MatchStore) -> None:
 
     assert final.awaiting_mulligan_user_ids == ()
     assert final.phase is MatchPhase.UPKEEP
+
+
+async def test_two_workers_closing_the_setup_at_once_reach_round_one(
+    redis: Redis,
+) -> None:
+    """Dois workers, cada um com o seu `MatchStore`, aplicando os dois
+    mulligans do protocolo ao mesmo tempo (feature 009, SC-007).
+
+    O comando do segundo mulligan executa o Upkeep da Rodada 1 dentro da
+    mesma mutação: quem perder a disputa é reaplicado sobre o estado que o
+    outro deixou, e a partida chega à Rodada 1 com os dois mulligans.
+    """
+    first_worker = MatchStore(redis, key_prefix="test:match")
+    second_worker = MatchStore(redis, key_prefix="test:match")
+    match = await saved_new_match(first_worker)
+    catalog = mvp_catalog()
+
+    def mulligan_of(user_id: int) -> MatchChange:
+        return lambda live: apply_command(
+            live,
+            MulliganCommand(user_id, ()),
+            catalog=catalog,
+            randomness=ScriptedRandomSource(),
+        )
+
+    await asyncio.gather(
+        first_worker.mutate(match.match_id, mulligan_of(PLAYER_ONE)),
+        second_worker.mutate(match.match_id, mulligan_of(PLAYER_TWO)),
+    )
+
+    final = await stored_match(first_worker, match)
+    assert (final.phase, final.round_number) == (MatchPhase.ACTION, 1)
+    assert final.awaiting_mulligan_user_ids == ()
 
 
 def _bump_passes(live: Match) -> None:
