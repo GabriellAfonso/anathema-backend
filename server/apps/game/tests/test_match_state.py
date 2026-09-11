@@ -30,10 +30,16 @@ def test_new_match_starts_waiting_for_the_mulligan(match: Match) -> None:
 
 
 def test_the_phase_set_is_closed(match: Match) -> None:
-    """As cinco fases da §2 mais a espera do setup, e nada além disso.
+    """As cinco fases da §2, mais a espera do setup e o fim da partida.
 
     `MULLIGAN` não é uma sexta fase do ciclo da rodada: é o momento anterior à
     Rodada 1, e é por isso que a §2 não a lista.
+
+    `FINISHED` também não é do ciclo: é a §10, o outro lado da partida. Entrou
+    na feature 006, e é terminal -- nenhuma transição sai dela.
+
+    Esta lista é um inventário deliberado: quem acrescenta uma fase precisa
+    passar por aqui e decidir o que ela significa. Foi o que aconteceu.
     """
     assert [phase.value for phase in MatchPhase] == [
         "mulligan",
@@ -42,6 +48,7 @@ def test_the_phase_set_is_closed(match: Match) -> None:
         "stack_resolution",
         "combat",
         "round_end",
+        "finished",
     ]
 
 

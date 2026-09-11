@@ -8,10 +8,14 @@ recarrega, o Fim de Rodada varre -- e trava na primeira partida real, porque
 ninguém dá o empurrão seguinte.
 
 O par `test_the_stack_branch_of_the_exit_is_wired` e
-`test_the_stack_stays_empty_across_ten_rounds` guarda a costura que esta feature
-deixa de propósito: a saída da §5 decide por `STACK_RESOLUTION`, e a cascata não
-sabe atravessá-lo. O primeiro afirma que o encaixe existe para a feature de
-pilha; o segundo, que nada nesta feature o alcança.
+`test_the_stack_stays_empty_across_ten_rounds` guarda a costura da pilha. Na
+feature 005 o primeiro afirmava que a saída da §5 parava em `STACK_RESOLUTION`,
+porque nada sabia esvaziá-la; desde a 006 ele afirma o outro lado da mesma
+costura -- a cascata atravessa a fase e devolve a partida à Fase de Ação, na
+mesma rodada. O segundo continua igual: um jogo só de passes nunca empilha nada.
+
+A regra que os dois guardam é a que não mudou: a saída da §5 continua escrita
+como estava, e foi a fase que ganhou corpo.
 """
 
 import pytest
@@ -34,7 +38,7 @@ from apps.game.match import (
     to_match_document,
 )
 from apps.game.randomness import RandomSource
-from apps.game.tests.fake_card_catalog import FakeCardCatalog
+from apps.game.tests.fake_card_catalog import SAMPLE_SPELL, FakeCardCatalog
 from apps.game.tests.fake_match_state import (
     PLAYER_ONE,
     PLAYER_TWO,
@@ -52,7 +56,7 @@ from apps.game.tests.match_snapshot import match_snapshot
 CHEAP_UNIT = Unit(
     card_id=CardId(2), name="CHEAP", energy=1, attack=3, health=4, image="cheap_card"
 )
-CATALOG = FakeCardCatalog([CHEAP_UNIT])
+CATALOG = FakeCardCatalog([CHEAP_UNIT, SAMPLE_SPELL])
 
 SETUP_HAND_WITH_TOKEN = 4
 SETUP_HAND_WITHOUT_TOKEN = 5
@@ -282,21 +286,32 @@ def test_the_stack_stays_empty_across_ten_rounds() -> None:
 
 
 def test_the_stack_branch_of_the_exit_is_wired() -> None:
-    """Com um feitiço posto à mão, dois passes levam a `STACK_RESOLUTION`.
+    """Com um feitiço posto à mão, dois passes atravessam a Resolução de Pilha.
 
-    A cascata para ali de propósito: a feature que enche a pilha é a que precisa
-    saber esvaziá-la (§6). O encaixe existe agora para que a saída da §5 não
-    precise ser reescrita depois -- e este teste é o que garante que ele continua
-    ligado.
+    A saída da §5 continua escrita como a feature 005 a escreveu; o que mudou é
+    que `STACK_RESOLUTION` ganhou corpo na 006 e entrou nas fases automáticas.
+    O chamador nunca observa a fase, e a rodada não fecha: os dois passes foram
+    consumidos pela resolução.
     """
     match = match_in_action_phase()
-    pending = fake_cards(match, [1001])[0]
-    match.stack = [StackEntry(card=pending, caster_user_id=PLAYER_ONE)]
+    match.players[1].bank = [
+        BankUnit(card=card) for card in fake_cards(match, [CHEAP_UNIT.card_id])
+    ]
+    pending = fake_cards(match, [SAMPLE_SPELL.card_id])[0]
+    match.stack = [
+        StackEntry(
+            card=pending,
+            caster_user_id=PLAYER_ONE,
+            target_card_instance_id=match.players[1].bank[0].card.card_instance_id,
+        )
+    ]
 
     act_pass(match)
     act_pass(match)
 
-    assert match.phase is MatchPhase.STACK_RESOLUTION
+    assert match.phase is MatchPhase.ACTION
+    assert match.stack == []
+    assert match.consecutive_passes == 0
     assert match.round_number == 1
 
 
