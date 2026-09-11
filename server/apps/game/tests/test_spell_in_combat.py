@@ -6,10 +6,9 @@ combate aberto: a vez que continua com o defensor enquanto ele bloqueia e
 conjura, o bloqueador que um feitiço salva, o atacante que um feitiço mata antes
 do dano, e a partida que acaba dentro da janela.
 
-Dois testes daqui usam SACRIFICIAL FIRE jogado pelo defensor, que a segunda
-correção da nota (2026-09-11, §14) proíbe, e foram trazidos da feature 007
-**sem mudança de afirmação**. A regra do FIRE os reescreve. O `return` que eles cobrem em `combat_cleanup._leave_combat` continua
-existindo, e a desistência da §10 vai precisar dele.
+A partida que acaba na janela é alcançada pela desistência da §10. O
+SACRIFICIAL FIRE, que alcançava o cenário até a correção da nota de 2026-09-11,
+é proibido ao defensor (§14) e está em `test_sacrificial_fire.py`.
 
 Custos do MVP: SOMEONE'S SHIELD 2, MAGIC BARRIER 3, LIFE POTION 4,
 SUMMONED AX 5.
@@ -23,6 +22,7 @@ from apps.game.engine import (
     CastSpellAction,
     EndDefenseWindowAction,
     MatchIsOverError,
+    forfeit,
     submit_action,
 )
 from apps.game.match import (
@@ -43,7 +43,6 @@ from apps.game.tests.fake_combat_board import (
     PLAYER_ONE,
     PLAYER_TWO,
     POLAROID,
-    SACRIFICIAL_FIRE,
     SKILLET,
     SOMEONES_SHIELD,
     SUMMONED_AX,
@@ -55,7 +54,6 @@ from apps.game.tests.fake_combat_board import (
 )
 from apps.game.tests.fake_random_source import ScriptedRandomSource
 
-FIRE_NEXUS_COST = 8
 AX_COST = 5
 
 
@@ -286,46 +284,34 @@ def test_killing_every_attacker_resolves_with_no_damage(
 # --- A partida que acaba dentro da janela ------------------------------------
 
 
-def test_a_defender_who_kills_themselves_freezes_the_combat(
+def test_a_match_that_ends_inside_the_window_freezes_the_combat(
     catalog: CardCatalog, source: RandomSource
 ) -> None:
-    """SACRIFICIAL FIRE cobra 8 de Nexus do lançador. Com 8 ou menos, o defensor
-    se derrota **dentro** da janela: nenhuma ação seguinte é aceita, o dano do
-    combate nunca resolve, e o estado de combate fica congelado onde parou.
+    """O defensor desiste com a janela aberta (§10): nenhuma ação seguinte é
+    aceita, o dano do combate nunca resolve, e o estado de combate fica
+    congelado onde parou. Até a correção de 2026-09-11 o cenário era alcançado
+    por um SACRIFICIAL FIRE do defensor, que a §14 proíbe."""
+    match = board(catalog, hand_two=(), bank_one=(MORTEM,), bank_two=(KHRAS,))
+    _block(match, catalog=catalog, source=source)
 
-    A §14 proíbe o FIRE ao defensor e o faz parar em Nexus 1. Quando ela
-    entrar, este cenário é alcançado pela desistência da §10.
-    """
-    match = board(
-        catalog, hand_two=(SACRIFICIAL_FIRE,), bank_one=(MORTEM,), bank_two=(KHRAS,)
-    )
-    match.player(PLAYER_TWO).nexus = FIRE_NEXUS_COST
-
-    cast(match, SACRIFICIAL_FIRE, catalog=catalog, source=source)
-
-    assert match.phase is MatchPhase.FINISHED
-    assert match.outcome is not None
-    assert match.outcome.defeated_user_id == PLAYER_TWO
+    forfeit(match, PLAYER_TWO)
 
     with pytest.raises(MatchIsOverError):
         resolve(match, catalog=catalog, source=source)
 
     assert match.combat is not None
-    assert match.player(PLAYER_ONE).nexus == STARTING_NEXUS
-    assert match.player(PLAYER_ONE).bank[0].damage_taken == 0
+    assert match.combat.blocks != []
+    assert match.player(PLAYER_TWO).nexus == STARTING_NEXUS
+    assert match.player(PLAYER_TWO).bank[0].damage_taken == 0
 
 
 def test_the_frozen_combat_still_survives_the_round_trip(
     catalog: CardCatalog, source: RandomSource
 ) -> None:
-    """O estado congelado precisa continuar íntegro e serializável. Mesma
-    ressalva da §14 do teste acima."""
-    match = board(
-        catalog, hand_two=(SACRIFICIAL_FIRE,), bank_one=(MORTEM,), bank_two=(KHRAS,)
-    )
-    match.player(PLAYER_TWO).nexus = FIRE_NEXUS_COST
-
-    cast(match, SACRIFICIAL_FIRE, catalog=catalog, source=source)
+    """O estado congelado precisa continuar íntegro e serializável."""
+    match = board(catalog, hand_two=(), bank_one=(MORTEM,), bank_two=(KHRAS,))
+    _block(match, catalog=catalog, source=source)
+    forfeit(match, PLAYER_TWO)
 
     document = to_match_document(match)
 

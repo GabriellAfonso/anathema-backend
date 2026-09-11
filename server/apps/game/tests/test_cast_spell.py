@@ -320,7 +320,8 @@ def test_both_phases_give_the_same_state(
     `if` de fase dentro de `cast_spell`, e é isso que este teste impede.
 
     SACRIFICIAL FIRE fica de fora: a §14 da nota, corrigida em 2026-09-11, o
-    proíbe ao defensor, e a feature que a implementa é outra.
+    restringe à declaração e o proíbe ao defensor. A regra dele está em
+    `test_sacrificial_fire.py`.
     """
     for card_id, needs_ally, needs_enemy in (
         (SOMEONES_SHIELD, True, False),

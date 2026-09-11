@@ -16,6 +16,10 @@ class TargetKind(StrEnum):
     NONE = "none"
     ALLIED_UNIT = "allied_unit"
     ENEMY_UNIT = "enemy_unit"
+    # Unidade aliada que está na zona de ataque da declaração (§7.1). Entrou com
+    # a regra própria do SACRIFICIAL FIRE (§14), na correção da nota de
+    # 2026-09-11.
+    ALLIED_ATTACKER = "allied_attacker"
 
 
 class EffectDuration(StrEnum):
@@ -29,15 +33,21 @@ class EffectDuration(StrEnum):
 class SpellEffectShape:
     """O que todo efeito declara para o motor decidir antes de aceitar a jogada.
 
-    `target_kind` e `duration` são `ClassVar` porque pertencem à mecânica, não à
-    instância: assim nenhum call site consegue construir SUMMONED AX mirando
-    unidade aliada.
+    `target_kind`, `duration` e `declaration_only` são `ClassVar` porque
+    pertencem à mecânica, não à instância: assim nenhum call site consegue
+    construir SUMMONED AX mirando unidade aliada.
+
+    `declaration_only` é o "momento permitido pelo feitiço" da §5B: a §14 dá a
+    um feitiço do MVP -- o SACRIFICIAL FIRE -- a regra de só valer na declaração
+    de ataque. Sem default, como as outras duas: um efeito novo que esqueça de
+    responder é erro de mypy.
     """
 
     __slots__ = ()
 
     target_kind: ClassVar[TargetKind]
     duration: ClassVar[EffectDuration]
+    declaration_only: ClassVar[bool]
 
     @property
     def requires_target(self) -> bool:
@@ -62,6 +72,7 @@ class BuffUnitHealth(SpellEffectShape):
 
     target_kind: ClassVar[TargetKind] = TargetKind.ALLIED_UNIT
     duration: ClassVar[EffectDuration] = EffectDuration.PERMANENT
+    declaration_only: ClassVar[bool] = False
 
     amount: int
 
@@ -83,6 +94,7 @@ class PreventUnitDamage(SpellEffectShape):
 
     target_kind: ClassVar[TargetKind] = TargetKind.ALLIED_UNIT
     duration: ClassVar[EffectDuration] = EffectDuration.PERMANENT
+    declaration_only: ClassVar[bool] = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +107,7 @@ class DamageUnit(SpellEffectShape):
 
     target_kind: ClassVar[TargetKind] = TargetKind.ENEMY_UNIT
     duration: ClassVar[EffectDuration] = EffectDuration.PERMANENT
+    declaration_only: ClassVar[bool] = False
 
     amount: int
 
@@ -109,23 +122,30 @@ class RestoreNexus(SpellEffectShape):
 
     target_kind: ClassVar[TargetKind] = TargetKind.NONE
     duration: ClassVar[EffectDuration] = EffectDuration.PERMANENT
+    declaration_only: ClassVar[bool] = False
 
     amount: int
 
 
 @dataclass(frozen=True, slots=True)
 class SacrificeNexusForAttack(SpellEffectShape):
-    """O próprio jogador paga Nexus e todas as unidades dele ganham ataque.
+    """O atacante paga Nexus, e uma unidade dele na zona de ataque ganha ataque.
+
+    Regra própria da §14, corrigida em 2026-09-11: só na declaração de ataque,
+    só pelo atacante, com alvo numa unidade própria na zona de ataque, e o
+    Nexus nunca cai abaixo de 1. Até a correção valia em qualquer momento, sem
+    alvo, dava ataque a todas as unidades, e podia derrotar quem jogava.
 
     Efeito composto porque a troca é indivisível: o custo em Nexus não existe
     sem o buff, nem o buff sem o custo.
 
     >>> SacrificeNexusForAttack(nexus_cost=8, attack_bonus=3).target_kind
-    <TargetKind.NONE: 'none'>
+    <TargetKind.ALLIED_ATTACKER: 'allied_attacker'>
     """
 
-    target_kind: ClassVar[TargetKind] = TargetKind.NONE
+    target_kind: ClassVar[TargetKind] = TargetKind.ALLIED_ATTACKER
     duration: ClassVar[EffectDuration] = EffectDuration.PERMANENT
+    declaration_only: ClassVar[bool] = True
 
     nexus_cost: int
     attack_bonus: int

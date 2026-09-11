@@ -23,6 +23,8 @@ from apps.game.cards import (
 )
 from apps.game.engine import (
     CastSpellAction,
+    DeclareAttackAction,
+    WithdrawAttackerAction,
     PassAction,
     submit_action,
     unit_has_damage_immunity,
@@ -151,17 +153,31 @@ def test_a_finished_document_is_stable_across_the_round_trip() -> None:
 # --------------------------------------------------------------------------
 
 
+def fire_on_an_attacker(
+    match: Match, catalog: CardCatalog, source: RandomSource
+) -> None:
+    """O primeiro jogador declara com a primeira unidade, joga SACRIFICIAL FIRE
+    nela (§14) e a puxa de volta -- a partida volta à Fase de Ação com o bônus
+    na unidade, que a §13 registra como pergunta em aberto."""
+    one = match.players[0]
+    attacker = bank_card(one)
+
+    for action in (
+        DeclareAttackAction(one.user_id, (attacker,)),
+        CastSpellAction(one.user_id, hand_card(one, SACRIFICIAL_FIRE), attacker),
+        WithdrawAttackerAction(one.user_id, attacker),
+    ):
+        submit_action(match, action, catalog=catalog, randomness=source)
+
+
 def played_out_match() -> Match:
     """Uma partida que passou pela §5B dos dois lados, com os feitiços já
     resolvidos.
 
     Sai do motor de verdade, e não montada à mão: o que precisa sobreviver é o
-    estado que o lançamento **produz**, não um que se pareça com ele.
-
-    SACRIFICIAL FIRE é jogado na Fase de Ação porque é o único feitiço do MVP
-    que cria `AttackModifier`. A §14 da nota, corrigida em 2026-09-11, o
-    restringe à declaração de ataque; a feature que a implementa muda este
-    lançamento de lugar.
+    estado que o lançamento **produz**, não um que se pareça com ele. O
+    SACRIFICIAL FIRE é o único feitiço do MVP que cria `AttackModifier`, e é
+    jogado na declaração, como a §14 manda.
     """
     catalog = mvp_catalog()
     source = ScriptedRandomSource()
@@ -172,9 +188,15 @@ def played_out_match() -> Match:
     )
     one, two = match.players
 
-    for action in (
+    submit_action(
+        match,
         CastSpellAction(one.user_id, hand_card(one, SOMEONES_SHIELD), bank_card(one)),
-        CastSpellAction(one.user_id, hand_card(one, SACRIFICIAL_FIRE)),
+        catalog=catalog,
+        randomness=source,
+    )
+    fire_on_an_attacker(match, catalog, source)
+
+    for action in (
         PassAction(one.user_id),
         CastSpellAction(two.user_id, hand_card(two, MAGIC_BARRIER), bank_card(two)),
     ):
@@ -267,14 +289,10 @@ def test_the_round_end_keeps_the_permanent_modifiers() -> None:
         catalog=catalog,
         randomness=source,
     )
-    submit_action(
-        match,
-        CastSpellAction(one.user_id, hand_card(one, SACRIFICIAL_FIRE)),
-        catalog=catalog,
-        randomness=source,
-    )
+    fire_on_an_attacker(match, catalog, source)
     pass_until_priority_returns(match, catalog, source)
 
+    assert match.round_number == 2
     assert {type(modifier) for modifier in unit.modifiers} == {
         HealthModifier,
         AttackModifier,

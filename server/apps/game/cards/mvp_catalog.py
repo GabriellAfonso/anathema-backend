@@ -120,8 +120,8 @@ MVP_SPELLS: tuple[Spell, ...] = (
         "SACRIFICIAL FIRE",
         energy=8,
         description=(
-            "Você perde 8 de Nexus e todas as suas unidades em campo ganham "
-            "3 de ataque."
+            "Só na declaração de ataque. Você perde 8 de Nexus, sem cair abaixo "
+            "de 1, e a unidade aliada alvo na zona de ataque ganha 3 de ataque."
         ),
         effect=SacrificeNexusForAttack(nexus_cost=8, attack_bonus=3),
         image="sacrificial_fire",

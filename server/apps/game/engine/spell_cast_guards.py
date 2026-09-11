@@ -37,9 +37,11 @@ from apps.game.match import (
     CardInstanceId,
     Match,
     MatchCard,
+    MatchPhase,
     PlayerState,
 )
 
+from .blocker_pairing import UnitIsNotAttackingError
 from .player_action import (
     CastSpellAction,
     IllegalActionError,
@@ -156,6 +158,28 @@ class SpellTargetNotOnBattlefieldError(IllegalActionError):
         self.target_card_instance_id = target_card_instance_id
 
 
+class SpellOnlyInDeclarationError(IllegalActionError):
+    """Um feitiço de regra própria jogado fora do momento dele (§14).
+
+    O SACRIFICIAL FIRE só vale na declaração de ataque, e só o atacante tem a
+    vez nela -- então esta recusa cobre também o defensor que tenta jogá-lo na
+    janela dele.
+
+    >>> raise SpellOnlyInDeclarationError(card, MatchPhase.ACTION)
+    SpellOnlyInDeclarationError: card instance 3 (card 1003) can only be cast
+    in the declaration: the match is in phase 'action'
+    """
+
+    def __init__(self, card: MatchCard, phase: MatchPhase) -> None:
+        super().__init__(
+            f"card instance {card.card_instance_id} (card {card.card_id}) can "
+            f"only be cast in the {MatchPhase.DECLARATION}: the match is in "
+            f"phase '{phase}'"
+        )
+        self.card_instance_id = card.card_instance_id
+        self.phase = phase
+
+
 @dataclass(frozen=True, slots=True)
 class ValidatedSpellCast:
     """O que as quatro guardas apuraram, para quem chamou não reapurar.
@@ -191,6 +215,7 @@ def validated_spell_cast(
     card = card_in_hand(actor, action.card_instance_id)
     spell = _as_spell(card, catalog)
 
+    _ensure_castable_in_this_phase(match, card, spell)
     ensure_enough_energy(actor, card, spell.energy)
     target = _validated_target(
         match, actor, card, spell, action.target_card_instance_id
@@ -211,6 +236,19 @@ def _as_spell(card: MatchCard, catalog: CardCatalog) -> Spell:
         raise CardIsNotASpellError(card, template.card_type)
 
     return template
+
+
+def _ensure_castable_in_this_phase(match: Match, card: MatchCard, spell: Spell) -> None:
+    """O momento permitido pelo feitiço (§5B, §14), entre a carta e o custo.
+
+    Vem antes da energia pela mesma razão que a carta vem: é pergunta sobre a
+    jogada, e a recusa de energia de um feitiço que nem podia ser jogado agora
+    esconderia o erro de verdade.
+    """
+    if not spell.effect.declaration_only or match.phase is MatchPhase.DECLARATION:
+        return
+
+    raise SpellOnlyInDeclarationError(card, match.phase)
 
 
 def _validated_target(
@@ -270,6 +308,7 @@ def _target_on_the_right_side(
     owner_user_id = _owner_of(match, target_card_instance_id)
 
     if owner_user_id == _expected_owner(match, actor, expected):
+        _ensure_attacking_when_asked(match, target_card_instance_id, expected)
         return target
 
     raise WrongSpellTargetSideError(
@@ -296,7 +335,28 @@ def _owner_of(match: Match, target_card_instance_id: CardInstanceId) -> int | No
 def _expected_owner(match: Match, actor: PlayerState, expected: TargetKind) -> int:
     """De quem o alvo teria de ser. "Aliado" e "inimigo" são relativos a quem
     lança, e é aqui que essa relatividade vira um `user_id`."""
-    if expected is TargetKind.ALLIED_UNIT:
+    if expected in (TargetKind.ALLIED_UNIT, TargetKind.ALLIED_ATTACKER):
         return actor.user_id
 
     return match.opponent_of(actor.user_id).user_id
+
+
+def _ensure_attacking_when_asked(
+    match: Match, target_card_instance_id: CardInstanceId, expected: TargetKind
+) -> None:
+    """`ALLIED_ATTACKER` pede, além do lado, a unidade na zona de ataque (§14).
+
+    Só chega aqui na declaração -- a guarda de momento correu antes --, então o
+    combate existe.
+    """
+    if expected is not TargetKind.ALLIED_ATTACKER:
+        return
+
+    combat = match.ongoing_combat()
+
+    if not combat.is_attacking(target_card_instance_id):
+        raise UnitIsNotAttackingError(
+            target_card_instance_id,
+            list(combat.attacker_card_instance_ids),
+            match.match_id,
+        )

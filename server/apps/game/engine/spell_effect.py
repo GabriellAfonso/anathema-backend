@@ -43,6 +43,9 @@ from .unit_damage import bury_dead_units, deal_damage_to_unit
 from .unit_vitals import unit_has_damage_immunity
 from .victory import change_nexus
 
+# Fluxo de Partida §14: o SACRIFICIAL FIRE nunca deixa o Nexus abaixo disto.
+MIN_NEXUS_AFTER_SACRIFICE = 1
+
 
 class SpellEffectNeedsTargetError(Exception):
     """Um efeito que exige alvo chegou aqui sem alvo.
@@ -111,7 +114,9 @@ def _dispatch(
         case RestoreNexus():
             change_nexus(match, caster, effect.amount)
         case SacrificeNexusForAttack():
-            _sacrifice_nexus_for_attack(match, caster, effect)
+            _sacrifice_nexus_for_attack(
+                match, caster, _targeted(effect, target), effect
+            )
         case _:
             assert_never(effect)
 
@@ -141,23 +146,28 @@ def _prevent_unit_damage(target: BankUnit, effect: PreventUnitDamage) -> None:
 
 
 def _sacrifice_nexus_for_attack(
-    match: Match, caster: PlayerState, effect: SacrificeNexusForAttack
+    match: Match, caster: PlayerState, target: BankUnit, effect: SacrificeNexusForAttack
 ) -> None:
-    """SACRIFICIAL FIRE: o lançador paga Nexus e todas as unidades dele sobem.
+    """SACRIFICIAL FIRE (§14): a unidade alvo ganha ataque, e o lançador paga.
 
-    O buff vem **antes** do custo. A troca é indivisível, e nesta ordem ela é
-    indivisível qualquer que seja o comportamento da §10: um lançador que se
-    derrota não perde o bônus que acabou de pagar.
-
-    Um lançador sem unidade nenhuma paga do mesmo jeito -- o laço sobre um banco
-    vazio não faz nada, e o custo vem depois dele.
+    O buff vem **antes** do custo, e a troca é indivisível: o custo não existe
+    sem o buff. O custo nunca deixa o Nexus abaixo de 1 -- com Nexus 1, joga
+    sem perder nada --, e por isso o FIRE não derrota ninguém (§10).
     """
-    for unit in caster.bank:
-        unit.modifiers.append(
-            AttackModifier(amount=effect.attack_bonus, duration=effect.duration)
-        )
+    target.modifiers.append(
+        AttackModifier(amount=effect.attack_bonus, duration=effect.duration)
+    )
 
-    change_nexus(match, caster, -effect.nexus_cost)
+    change_nexus(match, caster, -_affordable_nexus_cost(caster, effect))
+
+
+def _affordable_nexus_cost(caster: PlayerState, effect: SacrificeNexusForAttack) -> int:
+    """Quanto o FIRE cobra de verdade: `nexus = max(nexus - custo, 1)` (§14).
+
+    >>> _affordable_nexus_cost(caster_with_nexus_5, SacrificeNexusForAttack(8, 3))
+    4
+    """
+    return max(min(effect.nexus_cost, caster.nexus - MIN_NEXUS_AFTER_SACRIFICE), 0)
 
 
 def _targeted(effect: SpellEffect, target: BankUnit | None) -> BankUnit:

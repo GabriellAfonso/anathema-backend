@@ -221,27 +221,28 @@ def test_fire_costs_the_caster_eight_nexus(match: Match, catalog: CardCatalog) -
     one = match.players[0]
 
     apply_spell_effect(
-        match, one, effect_of(catalog, SACRIFICIAL_FIRE), None, catalog=catalog
+        match, one, effect_of(catalog, SACRIFICIAL_FIRE), one.bank[0], catalog=catalog
     )
 
     assert one.nexus == STARTING_NEXUS - 8
 
 
-def test_fire_gives_every_unit_of_the_caster_three_attack(
-    catalog: CardCatalog,
-) -> None:
+def test_fire_gives_three_attack_to_the_target_only(catalog: CardCatalog) -> None:
+    """§14: uma unidade só -- até a correção de 2026-09-11 eram todas."""
     match = fake_spell_board(
         catalog=catalog, bank_one=(TOUGH_UNIT, FRAGILE_UNIT, TOUGH_UNIT)
     )
     one = match.players[0]
 
     apply_spell_effect(
-        match, one, effect_of(catalog, SACRIFICIAL_FIRE), None, catalog=catalog
+        match, one, effect_of(catalog, SACRIFICIAL_FIRE), one.bank[1], catalog=catalog
     )
 
     assert [unit.modifiers for unit in one.bank] == [
-        [AttackModifier(amount=3, duration=EffectDuration.PERMANENT)]
-    ] * 3
+        [],
+        [AttackModifier(amount=3, duration=EffectDuration.PERMANENT)],
+        [],
+    ]
 
 
 def test_fire_leaves_the_opponent_units_alone(
@@ -250,78 +251,53 @@ def test_fire_leaves_the_opponent_units_alone(
     one, two = match.players
 
     apply_spell_effect(
-        match, one, effect_of(catalog, SACRIFICIAL_FIRE), None, catalog=catalog
+        match, one, effect_of(catalog, SACRIFICIAL_FIRE), one.bank[0], catalog=catalog
     )
 
     assert two.bank[0].modifiers == []
 
 
-def test_fire_costs_the_nexus_with_no_units_on_the_field(
-    catalog: CardCatalog,
-) -> None:
-    """A troca é indivisível: o custo acontece mesmo sem nada para buffar."""
-    match = fake_spell_board(catalog=catalog, bank_one=())
-    one = match.players[0]
-
-    apply_spell_effect(
-        match, one, effect_of(catalog, SACRIFICIAL_FIRE), None, catalog=catalog
-    )
-
-    assert one.nexus == STARTING_NEXUS - 8
-
-
-def test_fire_can_defeat_its_own_caster(match: Match, catalog: CardCatalog) -> None:
-    one = match.players[0]
-    one.nexus = 8
-
-    apply_spell_effect(
-        match, one, effect_of(catalog, SACRIFICIAL_FIRE), None, catalog=catalog
-    )
-
-    assert (one.nexus, match.is_over) == (0, True)
-
-
-def test_a_self_defeating_fire_still_grants_the_attack_bonus(
+def test_fire_never_leaves_the_nexus_below_one(
     match: Match, catalog: CardCatalog
 ) -> None:
-    """Indivisível nos dois sentidos: o buff vem antes do custo."""
+    """`nexus = max(nexus - 8, 1)` (§14)."""
     one = match.players[0]
-    one.nexus = 8
+    one.nexus = 5
 
     apply_spell_effect(
-        match, one, effect_of(catalog, SACRIFICIAL_FIRE), None, catalog=catalog
+        match, one, effect_of(catalog, SACRIFICIAL_FIRE), one.bank[0], catalog=catalog
     )
 
+    assert one.nexus == 1
+
+
+def test_fire_with_nexus_one_costs_nothing_and_still_buffs(
+    match: Match, catalog: CardCatalog
+) -> None:
+    one = match.players[0]
+    one.nexus = 1
+
+    apply_spell_effect(
+        match, one, effect_of(catalog, SACRIFICIAL_FIRE), one.bank[0], catalog=catalog
+    )
+
+    assert one.nexus == 1
     assert one.bank[0].modifiers == [
         AttackModifier(amount=3, duration=EffectDuration.PERMANENT)
     ]
 
 
-def test_a_self_defeating_fire_reaches_the_terminal_phase(
-    match: Match, catalog: CardCatalog
-) -> None:
+def test_fire_never_ends_the_match(match: Match, catalog: CardCatalog) -> None:
+    """Nenhum feitiço derrota ninguém (§10): com 8 de Nexus, sobra 1."""
     one = match.players[0]
-    one.nexus = 5
+    one.nexus = 8
 
     apply_spell_effect(
-        match, one, effect_of(catalog, SACRIFICIAL_FIRE), None, catalog=catalog
-    )
-
-    assert match.phase is MatchPhase.FINISHED
-    assert one.nexus == -3
-
-
-def test_fire_with_nine_nexus_does_not_end_the_match(
-    match: Match, catalog: CardCatalog
-) -> None:
-    one = match.players[0]
-    one.nexus = 9
-
-    apply_spell_effect(
-        match, one, effect_of(catalog, SACRIFICIAL_FIRE), None, catalog=catalog
+        match, one, effect_of(catalog, SACRIFICIAL_FIRE), one.bank[0], catalog=catalog
     )
 
     assert (one.nexus, match.is_over) == (1, False)
+    assert match.phase is MatchPhase.ACTION
 
 
 # --------------------------------------------------------------------------
@@ -548,7 +524,7 @@ def test_every_mvp_effect_has_an_arm(match: Match, catalog: CardCatalog) -> None
     targets = {
         SOMEONES_SHIELD: one.bank[0],
         MAGIC_BARRIER: one.bank[0],
-        SACRIFICIAL_FIRE: None,
+        SACRIFICIAL_FIRE: one.bank[0],
         LIFE_POTION: None,
         SUMMONED_AX: two.bank[0],
     }

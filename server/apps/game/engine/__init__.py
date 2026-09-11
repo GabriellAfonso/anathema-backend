@@ -11,11 +11,11 @@ combate da §7 com a janela livre do defensor e o dano simultâneo, e a condiç�
 de vitória da §10.
 
 Uma partida roda do setup da §3 à vitória da §10 sem tocar em websocket. A nota
-foi corrigida duas vezes em 2026-09-11: a primeira correção (feitiço que
-resolve na hora e não gasta a vez) é a feature 008; a segunda -- energia que acumula, a
-declaração como janela, regra própria de SACRIFICIAL FIRE e MAGIC BARRIER, a
-desistência -- ainda não está aqui. O relógio da vez (§15) é problema de
-transporte, não deste pacote.
+foi corrigida duas vezes em 2026-09-11, e as duas estão aqui: o feitiço que
+resolve na hora e não gasta a vez, a energia que acumula, a declaração de ataque
+como janela, a regra própria de SACRIFICIAL FIRE e MAGIC BARRIER, e a
+desistência sem empate. O relógio da vez (§15) é problema de transporte, não
+deste pacote.
 
 >>> from apps.game.engine import MatchEntry, start_match
 >>> match = start_match(one, two, catalog=catalog, randomness=source, seed=seed)
@@ -89,6 +89,7 @@ from .player_action import (
 )
 from .spell_cast_guards import (
     CardIsNotASpellError,
+    SpellOnlyInDeclarationError,
     SpellNeedsTargetError,
     SpellTakesNoTargetError,
     SpellTargetNotOnBattlefieldError,
@@ -156,6 +157,7 @@ __all__ = [
     # `cast_spell` e `validated_spell_cast` **não** entram aqui, pela mesma
     # razão de `run_upkeep` e `end_round`: quem as chama é `round_cycle`.
     "CardIsNotASpellError",
+    "SpellOnlyInDeclarationError",
     "SpellTakesNoTargetError",
     "SpellNeedsTargetError",
     "WrongSpellTargetSideError",
