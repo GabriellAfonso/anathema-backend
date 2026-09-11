@@ -20,9 +20,9 @@ Dano acumulado não é varrido: ele não é modificador, não expira, e mora em
 Não existe descarte por excesso de mão. O teto de 10 é aplicado na compra (§9),
 e a própria §8 registra isso.
 
-Nenhum feitiço existe ainda para criar um modificador temporário. A varredura
-existe assim mesmo, e é testada com um modificador posto à mão -- senão a
-feature de pilha teria de voltar aqui.
+A varredura nasceu na feature 005, antes de existir feitiço que criasse um
+modificador temporário, e foi testada com um modificador posto à mão -- senão a
+feature de feitiço teria de voltar aqui.
 """
 
 from apps.game.cards import EffectDuration

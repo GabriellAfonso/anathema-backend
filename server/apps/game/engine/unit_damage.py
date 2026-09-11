@@ -24,8 +24,9 @@ def deal_damage_to_unit(unit: BankUnit, amount: int) -> None:
     Não remove a unidade morta: quem faz isso é `bury_dead_units`, sobre os dois
     bancos, porque `BankUnit` não sabe de quem é.
 
-    O feitiço que acerta uma unidade imune **não fizzla** -- o alvo está em
-    campo, o efeito foi aplicado, e aplicar 0 de dano é o resultado correto.
+    O feitiço que acerta uma unidade imune é aceito e não faz nada -- o alvo
+    está em campo, o efeito foi aplicado, e aplicar 0 de dano é o resultado
+    correto.
 
     >>> deal_damage_to_unit(unit, 3)
     >>> unit.damage_taken

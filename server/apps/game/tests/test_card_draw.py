@@ -290,7 +290,7 @@ def test_an_empty_deck_and_an_empty_graveyard_do_not_draw(
     """Não há de onde comprar nem o que resetar, e mesmo assim não levanta.
 
     Inalcançável em partida legal: as 40 cartas de um jogador não cabem entre
-    mão (teto de 10), banco (teto de 6) e pilha. Testado porque a alternativa
+    mão (teto de 10) e banco (teto de 6). Testado porque a alternativa
     -- levantar -- mataria a partida pelo motivo que a §9 proíbe.
     """
     player.deck = []

@@ -1,9 +1,9 @@
 """A §7.3: todo o dano de uma vez, e a §10 apurada uma vez só.
 
 `resolve_combat_damage` é exercitada **direto**, sobre um combate montado, antes
-de existir a ação que a dispara — é o mesmo corte que a feature 006 fez com
-`resolve_stack`, e ele existe para que um erro no cálculo apareça sem a cascata
-no meio.
+de existir a ação que a dispara — um corte que a feature 006 já tinha feito
+com a resolução de feitiço, e que existe para que um erro no cálculo apareça sem
+a cascata no meio.
 
 Ninguém morre nestes testes: este módulo acumula dano e altera Nexus, e a
 varredura da §7.4 é de `combat_cleanup.py`. O que se afirma aqui é

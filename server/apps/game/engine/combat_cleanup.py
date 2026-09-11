@@ -51,8 +51,7 @@ def _leave_combat(match: Match) -> None:
 
     O `return` da partida terminada não é defesa contra o impossível: sem ele, o
     combate que encerrou a partida a devolveria a `ACTION` e apagaria
-    `FINISHED`. É a mesma linha, pela mesma razão, de
-    `stack_resolution._reopen_action_phase`.
+    `FINISHED`.
 
     `priority_user_id` recebe `token_holder_user_id` sem estreitamento: os dois
     campos são `int | None`, e a §7.4 manda devolver a vez a quem declarou.

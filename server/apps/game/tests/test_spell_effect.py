@@ -1,15 +1,14 @@
 """Os cinco efeitos do MVP produzem o que a carta descreve, e nada além.
 
-Testa o aplicador **direto**, sem pilha nenhuma. É essa a fronteira que a
-feature de combate vai reusar: o mesmo `apply_spell_effect` que a §6 chama
-depois de revalidar o alvo é o que a §7.2 vai chamar com o alvo que acabou de
-receber.
+Testa o aplicador **direto**, sem passar por `submit_action`. É a fronteira
+que `cast_spell` usa nas duas fases: o mesmo `apply_spell_effect`, com o alvo
+que a guarda de lançamento acabou de validar.
 
 Os números são os do catálogo do MVP, lidos dos campos estruturados do efeito.
 Nenhum teste daqui lê `Spell.description`.
 
-A comparação com o caminho da pilha está em `test_stack_resolution.py`, que é
-quem tem a pilha.
+A comparação entre as duas fases está em
+`test_cast_spell.py::test_both_phases_give_the_same_state`.
 """
 
 import pytest
@@ -181,7 +180,8 @@ def test_damage_does_not_enter_a_barriered_unit(
 
 
 def test_a_barriered_unit_does_not_die(match: Match, catalog: CardCatalog) -> None:
-    """E o feitiço não fizzla: o alvo estava em campo, o efeito foi aplicado."""
+    """E o feitiço não é recusado: o alvo estava em campo, o efeito foi
+    aplicado."""
     one, two = match.players
     unit = two.bank[0]
     apply_spell_effect(
@@ -465,10 +465,10 @@ def test_the_ax_changes_no_nexus(match: Match, catalog: CardCatalog) -> None:
 
 
 def test_the_applier_takes_no_origin_parameter() -> None:
-    """FR-029: nada diz se a chamada veio da pilha ou do combate.
+    """FR-029: nada diz de que fase a chamada veio.
 
     Afirmado sobre a assinatura, e não sobre o comportamento, porque é a
-    assinatura que impede a feature de combate de acrescentar um ramo.
+    assinatura que impede alguém de acrescentar um ramo por fase.
     """
     from inspect import signature
 
@@ -484,8 +484,8 @@ def test_the_applier_takes_no_origin_parameter() -> None:
 def test_the_applier_never_revalidates_the_target(
     match: Match, catalog: CardCatalog
 ) -> None:
-    """Um alvo que já saiu de campo é aplicado assim mesmo: revalidar é da
-    pilha, e o fizzle nunca chega aqui."""
+    """Um alvo que já saiu de campo é aplicado assim mesmo: validar é da
+    guarda de lançamento, que roda antes, na mesma jogada."""
     one, two = match.players
     orphan = two.bank.pop()
 

@@ -1,14 +1,13 @@
 """Executa os cinco efeitos do MVP sobre a partida.
 
-**Este módulo não sabe de onde a chamada veio, e não existe parâmetro que
-diga.** Na Fase de Ação a Resolução de Pilha (§6) chama isto depois de revalidar
-o alvo; no combate (§7.2) o feitiço do defensor vai chamar o mesmo, com o alvo
-que acabou de receber, sem pilha e sem chance de resposta. É o mesmo efeito com
-o mesmo resultado, por dois caminhos.
+**Este módulo não sabe de que fase a chamada veio, e não existe parâmetro que
+diga.** Quem chama é `cast_spell`, na Fase de Ação e na janela do defensor
+(§5B, §7.2), com o alvo que a guarda de lançamento acabou de validar. É o mesmo
+efeito com o mesmo resultado nas duas fases.
 
 Um parâmetro de origem -- mesmo um booleano -- convidaria o primeiro `if` que
-faz os dois caminhos divergirem, e a partir daí existiriam duas implementações
-de cada efeito para manter iguais à mão.
+faz as duas fases divergirem, e a partir daí existiriam duas implementações de
+cada efeito para manter iguais à mão.
 
 O despacho é um `match` exaustivo sobre `SpellEffect`, a união fechada que
 `cards/effects.py` escreveu prevendo este módulo: um efeito novo sem braço é
@@ -47,8 +46,8 @@ from .victory import change_nexus
 class SpellEffectNeedsTargetError(Exception):
     """Um efeito que exige alvo chegou aqui sem alvo.
 
-    Estado corrompido, não jogada: a §5B valida o alvo no lançamento, e a §6 o
-    revalida antes de chamar. Recusa nomeada em vez de `assert` -- que some com
+    Estado corrompido, não jogada: a §5B valida o alvo no lançamento, na mesma
+    jogada que chama isto. Recusa nomeada em vez de `assert` -- que some com
     `-O` -- pela mesma razão de `round_end._swap_token`.
 
     >>> raise SpellEffectNeedsTargetError(DamageUnit(amount=3))
@@ -73,14 +72,13 @@ def apply_spell_effect(
 ) -> None:
     """Aplica um dos cinco efeitos, e apura o que o efeito deixou para trás.
 
-    `target` já vem revalidado. `None` significa que o efeito **não mira nada**,
-    nunca que o alvo sumiu -- decidir isso é da pilha, e o fizzle nunca chega
-    aqui.
+    `target` já vem validado. `None` significa que o efeito **não mira nada** --
+    a guarda de lançamento recusa alvo fora de campo antes de chegar aqui.
 
-    A morte é verificada assim que o efeito termina, e não no fim da pilha: o
-    feitiço seguinte precisa enxergar o alvo já morto, que é o que faz o exemplo
-    canônico da §6 funcionar. A vitória (§10) é apurada dentro de
-    `change_nexus`, junto do evento que alterou o Nexus.
+    A morte é verificada assim que o efeito termina: o feitiço seguinte da
+    mesma vez precisa enxergar o alvo já morto, e é isso que faz um SUMMONED AX
+    seguido de outro recusar o segundo por alvo fora de campo. A vitória (§10) é
+    apurada dentro de `change_nexus`, junto do evento que alterou o Nexus.
 
     >>> apply_spell_effect(match, caster, DamageUnit(amount=3), unit,
     ...                    catalog=catalog)

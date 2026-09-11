@@ -1,6 +1,6 @@
 """O setup precisa ser repetível, senão nenhum teste do resto do motor é.
 
-Combate, pilha e compra partem todos de uma partida montada pelo setup. Se
+Combate, feitiço e compra partem todos de uma partida montada pelo setup. Se
 duas execuções com as mesmas entradas divergirem, todo teste que dependa da
 mão inicial vira sorteio.
 

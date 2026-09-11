@@ -1,10 +1,11 @@
 """O Fim de Rodada da §8: a varredura de modificadores, a troca de token e a
 virada de rodada.
 
-Nenhum feitiço existe ainda para criar um modificador "até o fim da rodada", e é
-por isso que os modificadores destes testes são postos à mão. A varredura precisa
-existir e ser testada agora -- senão a feature de pilha teria de voltar aqui, e o
-primeiro buff temporário do jogo seria também o primeiro a nunca expirar.
+Os modificadores destes testes são postos à mão: a varredura nasceu na feature
+005, antes de existir feitiço que criasse um modificador "até o fim da rodada".
+Ela precisava existir e ser testada naquela hora -- senão a feature de feitiço
+teria de voltar aqui, e o primeiro buff temporário do jogo seria também o
+primeiro a nunca expirar.
 
 O teste que mais paga é `test_damage_is_not_swept`: dano não é modificador, e uma
 varredura escrita sobre "tudo que é temporário na unidade" o levaria junto.

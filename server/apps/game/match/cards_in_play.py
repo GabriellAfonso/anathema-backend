@@ -30,8 +30,8 @@ CardInstanceId = NewType("CardInstanceId", int)
 
 @dataclass(slots=True)
 class MatchCard:
-    """Uma carta que pertence a uma partida. Vive no deck, na mão, no
-    cemitério e dentro de uma entrada da pilha.
+    """Uma carta que pertence a uma partida. Vive no deck, na mão e no
+    cemitério, e dentro de um `BankUnit` quando está em campo.
 
     Dois campos e mais nada: nome, custo, ataque e vida ficam no catálogo, e
     carta fora do banco não carrega dano nem buff — um `MatchCard` nem tem

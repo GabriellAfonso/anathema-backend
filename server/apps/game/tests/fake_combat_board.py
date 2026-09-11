@@ -59,8 +59,8 @@ def fake_combat_board(
     bank_one: tuple[CardId, ...] = (DARK_AGE,),
     bank_two: tuple[CardId, ...] = (KHRAS,),
 ) -> Match:
-    """Partida na Fase de Ação, token e prioridade no primeiro jogador, pilha
-    vazia, e as unidades pedidas nos dois bancos.
+    """Partida na Fase de Ação, token e prioridade no primeiro jogador, e as
+    unidades pedidas nos dois bancos.
 
     As mãos vêm vazias por default: a maior parte dos testes do combate não
     lança feitiço nenhum, e uma mão cheia só acrescentaria cartas que nenhuma

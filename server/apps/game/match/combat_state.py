@@ -3,12 +3,12 @@ atacante.
 
 Nasce na declaração da §7.1, muda durante a janela do defensor da §7.2 e
 desaparece na limpeza da §7.4. Quem escreve é o motor — aqui o combate só é
-representado, como a pilha em `spell_stack.py`.
+representado.
 
-As unidades são guardadas por identificador, nunca por referência ao objeto. É
-a mesma decisão de `StackEntry`, e pela mesma razão: entre a declaração e a
-resolução um feitiço do defensor pode matar um atacante, e a revalidação por
-identificador é o que torna o bloqueador órfão da §7.3 possível de perguntar.
+As unidades são guardadas por identificador, nunca por referência ao objeto:
+entre a declaração e a resolução um feitiço do defensor pode matar um atacante,
+e a revalidação por identificador é o que torna o bloqueador órfão da §7.3
+possível de perguntar.
 
 O pareamento é uma **lista de pares**, e não um dicionário indexado por
 identificador. `documents.py` já escreveu a razão: chave de objeto JSON é

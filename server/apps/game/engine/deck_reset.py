@@ -35,7 +35,7 @@ def reset_deck_from_graveyard(
     >>> player.graveyard
     []
 
-    Mão e banco não são tocados: o reset é sobre as duas pilhas de carta, não
+    Mão e banco não são tocados: o reset é sobre os dois montes de carta, não
     sobre o que está em jogo.
     """
     player.deck = randomness.shuffled(player.graveyard, roll)

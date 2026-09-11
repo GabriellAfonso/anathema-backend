@@ -115,7 +115,7 @@ def _restock_deck(match: Match, player: PlayerState, randomness: RandomSource) -
 
     O `False` é o caso que a §9 não responde: deck vazio e cemitério vazio.
     Não acontece em partida legal -- as 40 cartas de um jogador não cabem entre
-    mão (teto de 10), banco (teto de 6) e pilha --, então isto é defesa contra
+    mão (teto de 10) e banco (teto de 6) --, então isto é defesa contra
     estado corrompido. Devolve em vez de levantar porque levantar mataria a
     partida exatamente pelo motivo que a §9 proíbe.
 

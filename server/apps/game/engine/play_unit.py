@@ -16,7 +16,7 @@ completo -- o campo que um rollback esquecesse não daria erro, daria partida em
 estado que nenhuma regra produziria.
 
 A unidade entra pronta e sem dano: não existe doença de invocação (§5A), e
-`BankUnit(card=card)` já nasce assim. Não usa a pilha, resolve na hora.
+`BankUnit(card=card)` já nasce assim. Resolve na hora.
 """
 
 from apps.game.cards import CardCatalog, CardType, Unit
@@ -38,7 +38,7 @@ MAX_BANK_SIZE = 6
 class CardIsNotAUnitError(IllegalActionError):
     """Usaram a ação de jogar unidade com uma carta que é feitiço.
 
-    Recusa e não roteamento: jogar feitiço é a ação B da §5, com pilha e alvo, e
+    Recusa e não roteamento: jogar feitiço é a ação B da §5, com alvo, e
     usar a ação errada não é atalho para ela.
 
     >>> raise CardIsNotAUnitError(CardInstanceId(3), CardId(1001), CardType.SPELL)

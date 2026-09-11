@@ -1,4 +1,4 @@
-"""Um tabuleiro pronto para exercitar a §5B e a §6, com as cartas reais do MVP.
+"""Um tabuleiro pronto para exercitar a §5B, com as cartas reais do MVP.
 
 Diferente de `fake_match_state.py`, que preenche zonas com `card_id` soltos
 para exercitar a serialização: aqui as cartas são as do catálogo do MVP, porque
@@ -6,7 +6,7 @@ o que está sob teste são os **números** que elas declaram -- 2 de vida, 3 de
 dano, 8 de Nexus, 5 de cura, 3 de ataque.
 
 Também diferente de `fake_setup.py`, que passa pelo setup da §3 com deck
-embaralhado: uma pilha de feitiços precisa de cartas específicas em mãos
+embaralhado: uma sequência de feitiços precisa de cartas específicas em mãos
 específicas, e sortear até que elas apareçam seria teste que depende da
 semente.
 

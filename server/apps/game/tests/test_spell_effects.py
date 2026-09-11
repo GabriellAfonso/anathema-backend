@@ -80,23 +80,3 @@ def test_no_effect_wants_a_target_it_cannot_name() -> None:
     for spell in MVP_SPELLS:
         if spell.effect.target_kind is TargetKind.NONE:
             assert not spell.effect.requires_target
-
-
-def test_target_properties_read_the_same_twice() -> None:
-    """O motor lê ao aceitar a jogada e de novo ao resolver a pilha.
-
-    As duas leituras precisam concordar, senão um feitiço aceito com alvo válido
-    poderia exigir outra coisa na resolução (Fluxo de Partida §5B e §6).
-    """
-    catalog = mvp_catalog()
-
-    for spell in MVP_SPELLS:
-        on_cast = catalog.card(spell.card_id)
-        on_resolve = catalog.card(spell.card_id)
-
-        assert isinstance(on_cast, Spell)
-        assert isinstance(on_resolve, Spell)
-        assert on_cast.effect == on_resolve.effect
-        assert on_cast.effect.requires_target == on_resolve.effect.requires_target
-        assert on_cast.effect.target_kind is on_resolve.effect.target_kind
-        assert on_cast.effect.duration is on_resolve.effect.duration
