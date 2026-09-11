@@ -22,7 +22,7 @@ from apps.game.cards import CardCatalog, Spell
 
 from apps.game.match import BankUnit, Match, MatchPhase, StackEntry
 
-from .cast_spell import CardIsNotASpellError
+from .spell_cast_guards import CardIsNotASpellError
 from .spell_effect import apply_spell_effect
 
 
