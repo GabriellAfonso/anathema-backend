@@ -16,8 +16,20 @@ recebe a recusa de prioridade, nunca a de energia.
 A união é fechada, como `Card` em `cards/card.py` e `UnitModifier` em
 `match/modifiers.py`, e pela mesma razão: um `match` que esqueça um braço é erro
 de mypy, não bug em produção. Jogar feitiço entrou como braço novo na feature
-006 sem que a guarda comum nem a porta de `round_cycle` mudassem de forma, que é
-exatamente o que a feature 005 escreveu prevendo. Declarar ataque entra igual.
+006, e as quatro ações do combate na 007, sem que a guarda comum nem a porta de
+`round_cycle` mudassem de forma -- que é exatamente o que a feature 005 escreveu
+prevendo.
+
+**A exceção da §7.2 mora na ação, e é isso que a impede de vazar.** Na Fase de
+Ação quem age executa uma ação e a prioridade troca; na janela do defensor ela
+não troca. `keeps_priority` é a propriedade da ação que diz qual das duas vale,
+e `round_cycle._pass_priority` só a lê -- ela não conhece a §7.2, e as quatro
+ações da §5 declaram `False` cada uma por si.
+
+Os quatro braços da §5 ficam aqui, junto das guardas comuns que os consomem; os
+quatro da §7.2 ficam em `combat_action.py`, e o discriminante que os dois lados
+precisam, em `action_kind.py`. A união fechada é montada aqui porque é aqui que
+`ensure_action_allowed` a recebe.
 
 Recusar é levantar, e é o oposto do `None` da compra da §9, de propósito: mão
 cheia é fluxo normal do jogo e por isso é valor de retorno; jogada ilegal é
@@ -27,7 +39,6 @@ exatamente como estava, sem rollback nenhum a manter completo.
 """
 
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import ClassVar
 
 from apps.game.match import (
@@ -39,17 +50,13 @@ from apps.game.match import (
     PlayerState,
 )
 
-
-class ActionKind(StrEnum):
-    """Discriminante da união, e o que o envelope de websocket vai carregar.
-
-    Conjunto fechado. A ação que falta da §5 -- declarar ataque -- entra aqui
-    junto com o braço dela.
-    """
-
-    PLAY_UNIT = "play_unit"
-    CAST_SPELL = "cast_spell"
-    PASS = "pass"
+from .action_kind import ActionKind
+from .combat_action import (
+    AssignBlockerAction,
+    CastCombatSpellAction,
+    EndDefenseWindowAction,
+    RemoveBlockerAction,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +80,20 @@ class PlayUnitAction:
     # permite **esta** ação". O bloqueio da §7.2 vai declarar `{COMBAT}` sem
     # que `ensure_action_allowed` mude uma linha.
     allowed_phases: ClassVar[frozenset[MatchPhase]] = frozenset({MatchPhase.ACTION})
+    # Se a ação devolve a vez. Mora na ação pela mesma razão que
+    # `allowed_phases` mora: a §5 escreve "depois de **qualquer** ação a
+    # prioridade passa ao oponente", e a §7.2 é a única exceção do jogo -- na
+    # janela do defensor ele age quantas vezes quiser sem devolver a vez.
+    #
+    # Escrever a exceção aqui, e não numa condição dentro de
+    # `round_cycle._pass_priority`, é o que a impede de vazar: quem lê aquela
+    # função não precisa saber da §7.2, e as quatro ações da Fase de Ação
+    # declaram `False` cada uma por si.
+    #
+    # Sem default, como `allowed_phases`: um braço novo que esqueça de
+    # responder é erro de mypy, e a resposta errada por omissão seria
+    # justamente a que vaza.
+    keeps_priority: ClassVar[bool] = False
 
     actor_user_id: int
     card_instance_id: CardInstanceId
@@ -91,6 +112,7 @@ class PassAction:
 
     action_kind: ClassVar[ActionKind] = ActionKind.PASS
     allowed_phases: ClassVar[frozenset[MatchPhase]] = frozenset({MatchPhase.ACTION})
+    keeps_priority: ClassVar[bool] = False
 
     actor_user_id: int
 
@@ -107,7 +129,9 @@ class CastSpellAction:
 
     `{ACTION}` e não `{ACTION, COMBAT}`: o feitiço do defensor da §7.2 resolve
     imediatamente, sem pilha e sem chance de resposta, e é outra ação -- não
-    esta com uma fase a mais.
+    esta com uma fase a mais. Essa outra é `CastCombatSpellAction`, logo abaixo,
+    e os dois braços têm os mesmos campos porque fazem coisas diferentes com
+    eles.
 
     >>> CastSpellAction(actor_user_id=7, card_instance_id=CardInstanceId(3),
     ...                 target_card_instance_id=CardInstanceId(11))
@@ -117,15 +141,53 @@ class CastSpellAction:
 
     action_kind: ClassVar[ActionKind] = ActionKind.CAST_SPELL
     allowed_phases: ClassVar[frozenset[MatchPhase]] = frozenset({MatchPhase.ACTION})
+    keeps_priority: ClassVar[bool] = False
 
     actor_user_id: int
     card_instance_id: CardInstanceId
     target_card_instance_id: CardInstanceId | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class DeclareAttackAction:
+    """Declarar ataque (§5C). A quarta e última ação da Fase de Ação.
+
+    `attacker_card_instance_ids` é uma tupla e não uma lista: a ação é
+    `frozen=True`, e uma lista dentro dela seria um campo imutável apontando
+    para um conteúdo mutável. A ordem é a da declaração, e é preservada -- o
+    dano da §7.3 é simultâneo e não a usa.
+
+    Nunca vazia: declarar ataque sem escolher unidade é jogada mal formada, e
+    `declare_attack` a recusa. O tipo não consegue dizer isso, e a recusa cita o
+    que o tipo não diz.
+
+    >>> DeclareAttackAction(actor_user_id=7,
+    ...                     attacker_card_instance_ids=(CardInstanceId(3),))
+    DeclareAttackAction(actor_user_id=7, attacker_card_instance_ids=(3,))
+    """
+
+    action_kind: ClassVar[ActionKind] = ActionKind.DECLARE_ATTACK
+    allowed_phases: ClassVar[frozenset[MatchPhase]] = frozenset({MatchPhase.ACTION})
+    # `False`: declarar ataque é ação da §5 como as outras três, e a prioridade
+    # passa ao oponente -- que é exatamente o defensor de quem a §7.2 fala.
+    keeps_priority: ClassVar[bool] = False
+
+    actor_user_id: int
+    attacker_card_instance_ids: tuple[CardInstanceId, ...]
+
+
 # União fechada: um `match` sobre `PlayerAction` que esqueça um braço é erro de
 # mypy, não jogada que some em produção.
-PlayerAction = PlayUnitAction | PassAction | CastSpellAction
+PlayerAction = (
+    PlayUnitAction
+    | PassAction
+    | CastSpellAction
+    | DeclareAttackAction
+    | AssignBlockerAction
+    | RemoveBlockerAction
+    | CastCombatSpellAction
+    | EndDefenseWindowAction
+)
 
 
 class IllegalActionError(Exception):
