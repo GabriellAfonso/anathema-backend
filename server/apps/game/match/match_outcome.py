@@ -1,4 +1,4 @@
-"""Como a partida acabou: quem chegou a Nexus zero (Fluxo de Partida §10).
+"""Como a partida acabou: quem perdeu, e por quê (Fluxo de Partida §10).
 
 Estado, e não evento. A §10 descreve o fim como situação -- "esse jogador
 perde" --, e situação que precisa sobreviver ao Redis e ser lida por qualquer
@@ -10,77 +10,38 @@ regra é do motor. Aqui o resultado só é representado.
 """
 
 from dataclasses import dataclass
-
-# A partida tem exatamente dois jogadores (§2), então um resultado nomeia um
-# derrotado -- e o outro venceu -- ou os dois, e foi empate.
-MIN_DEFEATED = 1
-MAX_DEFEATED = 2
+from enum import StrEnum
 
 
-class InvalidMatchOutcomeError(Exception):
-    """Construíram um resultado que não é resultado de partida nenhuma.
+class MatchEndReason(StrEnum):
+    """Por que a partida acabou. Conjunto fechado: as duas saídas da §10.
 
-    Vazio, três ou repetido. É erro de programação, não fluxo: quem constrói
-    isto já decidiu que a partida acabou.
-
-    >>> raise InvalidMatchOutcomeError(())
-    InvalidMatchOutcomeError: defeated_user_ids is (): expected one or two
-    distinct user_ids
+    Existe para o cliente distinguir "o Nexus dele chegou a zero" de "ele
+    desistiu" sem inferir do Nexus -- quem desiste com 20 de Nexus perdeu
+    igual.
     """
 
-    def __init__(self, defeated_user_ids: tuple[int, ...]) -> None:
-        super().__init__(
-            f"defeated_user_ids is {defeated_user_ids}: "
-            f"expected one or two distinct user_ids"
-        )
-        self.defeated_user_ids = defeated_user_ids
+    NEXUS_DEPLETED = "nexus_depleted"
+    FORFEIT = "forfeit"
 
 
 @dataclass(frozen=True, slots=True)
 class MatchOutcome:
-    """Quem perdeu, e nada mais.
+    """Quem perdeu, e por quê.
 
-    Um `user_id` é derrota do outro jogador; dois é empate. **Não existe campo
-    de vencedor**: ele é `match.players` menos isto, e gravá-lo seria a segunda
-    fonte que `PlayerState.user_id` e `Match.awaiting_mulligan_user_ids` já
-    recusam pela mesma razão -- uma segunda fonte não dá erro quando diverge,
-    dá estado errado que passa despercebido.
+    Um derrotado só: **não existe empate** (Fluxo de Partida, corrigido em
+    2026-09-11). Até a correção o campo era uma tupla de um ou dois `user_id`,
+    e o de dois era o empate; sem empate, a tupla só abria espaço para um estado
+    que não existe.
 
-    Valida na construção, alto e cedo, como `FrozenCardCatalog`: depois disso
-    não existe resultado inválido a checar em tempo de partida.
+    **Não existe campo de vencedor**: ele é o outro jogador de `match.players`,
+    e gravá-lo seria a segunda fonte que `PlayerState.user_id` e
+    `Match.awaiting_mulligan_user_ids` já recusam pela mesma razão -- uma segunda
+    fonte não dá erro quando diverge, dá estado errado que passa despercebido.
 
-    >>> MatchOutcome(defeated_user_ids=(7,)).is_draw
-    False
+    >>> MatchOutcome(defeated_user_id=7, reason=MatchEndReason.FORFEIT).reason
+    <MatchEndReason.FORFEIT: 'forfeit'>
     """
 
-    defeated_user_ids: tuple[int, ...]
-
-    def __post_init__(self) -> None:
-        _reject_impossible_arity(self.defeated_user_ids)
-
-    @property
-    def is_draw(self) -> bool:
-        """Os dois Nexus chegaram a zero no mesmo cálculo (§10).
-
-        Derivada e nunca gravada: um booleano ao lado da lista poderia
-        discordar dela.
-
-        >>> MatchOutcome(defeated_user_ids=(7, 9)).is_draw
-        True
-        """
-        return len(self.defeated_user_ids) == MAX_DEFEATED
-
-
-def _reject_impossible_arity(defeated_user_ids: tuple[int, ...]) -> None:
-    """Um ou dois `user_id`, sem repetição. Qualquer outra coisa recusa.
-
-    O mesmo jogador não perde duas vezes, e uma partida sem derrotado não
-    acabou.
-    """
-    distinct = set(defeated_user_ids)
-
-    if len(distinct) != len(defeated_user_ids):
-        raise InvalidMatchOutcomeError(defeated_user_ids)
-
-    if not MIN_DEFEATED <= len(distinct) <= MAX_DEFEATED:
-        raise InvalidMatchOutcomeError(defeated_user_ids)
+    defeated_user_id: int
+    reason: MatchEndReason

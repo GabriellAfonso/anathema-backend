@@ -273,7 +273,7 @@ class MatchIsOverError(PhaseForbidsActionError):
 
     >>> raise MatchIsOverError(ActionKind.PASS, outcome, "m-1")
     MatchIsOverError: action 'pass' is not allowed in match 'm-1': the match is
-    over, defeated user_ids (7,)
+    over, defeated user_id 7
     """
 
     def __init__(
@@ -285,8 +285,8 @@ class MatchIsOverError(PhaseForbidsActionError):
         IllegalActionError.__init__(
             self,
             f"action '{action_kind}' is not allowed in match {match_id!r}: "
-            f"the match is over, defeated user_ids "
-            f"{outcome.defeated_user_ids if outcome else ()}",
+            f"the match is over, defeated user_id "
+            f"{outcome.defeated_user_id if outcome else None}",
         )
         self.action_kind = action_kind
         self.outcome = outcome

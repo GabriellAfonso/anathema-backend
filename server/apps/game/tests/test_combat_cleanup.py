@@ -334,7 +334,7 @@ def test_lethal_combat_damage_finishes_the_match(
 
     assert match.phase is MatchPhase.FINISHED
     assert match.outcome is not None
-    assert match.outcome.defeated_user_ids == (PLAYER_TWO,)
+    assert match.outcome.defeated_user_id == PLAYER_TWO
 
 
 def test_a_finished_combat_does_not_go_back_to_the_action_phase(

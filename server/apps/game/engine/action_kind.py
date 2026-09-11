@@ -13,9 +13,9 @@ class ActionKind(StrEnum):
     """Discriminante da união, e o que o envelope de websocket vai carregar.
 
     Conjunto fechado: as quatro ações da Fase de Ação (§5) -- jogar feitiço
-    incluído, que também vale na janela do defensor -- e as três que só existem
-    na janela (§7.2). Eram oito até a feature 008, quando o feitiço da janela
-    deixou de ser uma ação separada.
+    incluído, que também vale na janela do defensor --, as três que só existem
+    na janela (§7.2), e a desistência da §10, que não é braço de `PlayerAction`
+    porque vale fora da vez, mas é gesto do jogador e o cliente a manda igual.
     """
 
     PLAY_UNIT = "play_unit"
@@ -25,3 +25,4 @@ class ActionKind(StrEnum):
     ASSIGN_BLOCKER = "assign_blocker"
     REMOVE_BLOCKER = "remove_blocker"
     END_DEFENSE_WINDOW = "end_defense_window"
+    FORFEIT = "forfeit"

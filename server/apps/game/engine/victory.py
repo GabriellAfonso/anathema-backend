@@ -1,100 +1,93 @@
-"""A §10: a única saída da partida, e a única porta que escreve Nexus.
+"""A §10: as duas saídas da partida, e a única porta que escreve Nexus.
 
-Duas funções públicas, e a divisão entre elas é a razão de este módulo existir
-separado do aplicador de efeito:
+As duas saídas passam por `_finish_match`, o único ponto do código que escreve
+o par (resultado, fase terminal):
 
-- `change_nexus` altera **um** Nexus e verifica logo em seguida. É o que a §5B
-  usa: SACRIFICIAL FIRE e LIFE POTION mexem num Nexus de cada vez.
-- `change_nexus_simultaneously` altera vários e verifica **uma vez**, depois de
-  todos. É o que a §7.3 usa: o dano de combate pode zerar os dois Nexus no mesmo
-  cálculo, e a §10 chama isso de empate.
-- `check_victory` só verifica, e é idempotente.
+- um Nexus chega a zero -- `change_nexus` altera e apura em seguida, e
+  `check_victory` só apura;
+- um jogador desiste -- `forfeit`, a qualquer momento, na vez dele ou não.
 
-Escolher a primeira onde cabe a segunda é o bug que nenhum teste de um jogador
-só pega: a primeira apuração já encerraria a partida com um único derrotado, e
-a segunda não corrigiria nada.
+**Não existe empate** (Fluxo de Partida, corrigido em 2026-09-11). É impossível
+por construção: só o dano de combate leva um Nexus a zero, e ele só atinge o
+defensor; o SACRIFICIAL FIRE para em 1 (§14). Por isso a apuração nomeia um
+derrotado só, e dois Nexus a zero ao mesmo tempo é estado corrompido, que
+levanta em vez de escolher um.
 
-O Nexus não tem teto nem piso. O 20 da §12 é o valor **inicial**, não um limite,
-e a sessão de esclarecimento da feature 006 fixou que a cura pode ultrapassá-lo.
-Um piso em zero apagaria por quanto o jogador passou do ponto, que é o que
-distingue um empate apertado de um estouro.
+Até a correção existia uma terceira porta, que alterava vários Nexus antes de
+apurar uma vez, para que o dano de combate pudesse empatar. Sem empate ela
+deixou de ter o que proteger, e o combate usa `change_nexus` no Nexus do
+defensor.
 
-Terminar a partida é escrever dois campos que precisam concordar -- o resultado
-e a fase terminal. `_finish_match` é o único ponto do código que faz isso, e é a
-existência desse ponto único que torna a invariante afirmável em vez de
-esperançosa.
+O Nexus não tem teto. O 20 da §12 é o valor **inicial**, não um limite, e a
+sessão de esclarecimento da feature 006 fixou que a cura pode ultrapassá-lo.
 """
 
-from collections.abc import Sequence
+from apps.game.match import (
+    Match,
+    MatchEndReason,
+    MatchOutcome,
+    MatchPhase,
+    PlayerState,
+)
 
-from apps.game.match import Match, MatchOutcome, MatchPhase, PlayerState
+from .action_kind import ActionKind
+from .player_action import MatchIsOverError
+
+
+class SimultaneousDefeatError(Exception):
+    """Os dois Nexus estão em zero ou menos ao mesmo tempo.
+
+    Estado corrompido, não jogada: a §10 diz que não existe empate e que nenhuma
+    regra do jogo leva os dois a zero. Recusa nomeada em vez de escolher um
+    derrotado, porque escolher esconderia o bug que produziu o estado.
+
+    >>> raise SimultaneousDefeatError((7, 9), "m-1")
+    SimultaneousDefeatError: users (7, 9) of match 'm-1' are all at nexus 0 or
+    below: expected at most one, there is no draw
+    """
+
+    def __init__(self, user_ids: tuple[int, ...], match_id: str) -> None:
+        super().__init__(
+            f"users {user_ids} of match {match_id!r} are all at nexus 0 or "
+            f"below: expected at most one, there is no draw"
+        )
+        self.user_ids = user_ids
+        self.match_id = match_id
 
 
 def change_nexus(match: Match, player: PlayerState, amount: int) -> None:
     """Altera o Nexus de um jogador e apura a §10 em seguida.
 
-    `amount` é assinado: LIFE POTION soma, SACRIFICIAL FIRE subtrai.
-
-    Sem teto e sem piso -- ver o cabeçalho do módulo.
-
-    O dano de combate **não** passa por aqui: ele altera os dois Nexus antes de
-    apurar, e usa `change_nexus_simultaneously`.
+    `amount` é assinado: LIFE POTION soma; SACRIFICIAL FIRE e o dano de combate
+    subtraem. Sem teto -- ver o cabeçalho do módulo.
 
     >>> change_nexus(match, caster, -8)
     >>> caster.nexus
     12
     """
     _add_to_nexus(player, amount)
-
-    check_victory(match)
-
-
-def change_nexus_simultaneously(
-    match: Match, amount_by_player: Sequence[tuple[PlayerState, int]]
-) -> None:
-    """Altera vários Nexus e apura a §10 **uma vez**, depois de todos (§7.3).
-
-    É a porta do dano de combate, e a diferença entre ela e `change_nexus` é a
-    razão de `check_victory` existir separada desde a feature 006: apurar depois
-    de cada alteração transformaria o empate da §10 em vitória do segundo,
-    porque a primeira apuração já encerraria a partida com um único derrotado e
-    a verificação é idempotente.
-
-    O combate cita os **dois** jogadores sempre, inclusive o atacante com 0 --
-    a soma de 0 não é operação morta, é a afirmação de que ele participou do
-    mesmo cálculo.
-
-    >>> change_nexus_simultaneously(match, ((defender, -7), (attacker, 0)))
-    """
-    for player, amount in amount_by_player:
-        _add_to_nexus(player, amount)
-
     check_victory(match)
 
 
 def _add_to_nexus(player: PlayerState, amount: int) -> None:
     """Único ponto do código que escreve Nexus.
 
-    Privado pela mesma razão de `_finish_match`: as duas portas públicas
-    diferem só em **quando** apuram, e um ponto só de escrita é o que impede uma
-    terceira de aparecer sem passar pela §10.
+    Privado pela mesma razão de `_finish_match`: um ponto só de escrita é o que
+    impede uma alteração de Nexus de acontecer sem passar pela §10.
     """
     player.nexus += amount
 
 
 def check_victory(match: Match) -> None:
-    """A §10, depois de qualquer evento que altere um Nexus.
-
-    Nexus ≤ 0 derrota o jogador; os dois ≤ 0 no mesmo cálculo é empate.
+    """A §10 por Nexus: quem está em zero ou menos perde.
 
     Idempotente: uma partida já terminada não muda de resultado, e chamar de
     novo não faz nada. É o que impede um efeito posterior de reescrever um
-    desfecho já apurado -- e é também o que torna a escolha errada entre as duas
-    portas **silenciosa**, porque a segunda apuração não desfaz a primeira.
+    desfecho já apurado.
 
     >>> check_victory(match)
-    >>> match.is_over
-    True
+    >>> match.outcome.reason
+    <MatchEndReason.NEXUS_DEPLETED: 'nexus_depleted'>
     """
     if match.is_over:
         return
@@ -106,14 +99,40 @@ def check_victory(match: Match) -> None:
     if not defeated:
         return
 
-    _finish_match(match, MatchOutcome(defeated_user_ids=defeated))
+    if len(defeated) > 1:
+        raise SimultaneousDefeatError(defeated, match.match_id)
+
+    _finish_match(match, defeated[0], MatchEndReason.NEXUS_DEPLETED)
 
 
-def _finish_match(match: Match, outcome: MatchOutcome) -> None:
+def forfeit(match: Match, user_id: int) -> None:
+    """A desistência da §10: o jogador perde, e o oponente vence na hora.
+
+    Porta própria, e não um braço de `PlayerAction`: a §10 permite desistir "a
+    qualquer momento da partida, na vez dele ou não, inclusive no mulligan", e
+    toda ação da união passa pela guarda de prioridade e pela de fase. Das três
+    guardas comuns, só a de participante e a de partida terminada valem aqui.
+
+    Não mexe em mais nada: mão, banco, combate aberto e mulligan pendente ficam
+    congelados onde estavam, como fica a partida que acaba por Nexus.
+
+    >>> forfeit(match, 9)
+    >>> match.outcome
+    MatchOutcome(defeated_user_id=9, reason=<MatchEndReason.FORFEIT: 'forfeit'>)
+    """
+    match.player(user_id)
+
+    if match.is_over:
+        raise MatchIsOverError(ActionKind.FORFEIT, match.outcome, match.match_id)
+
+    _finish_match(match, user_id, MatchEndReason.FORFEIT)
+
+
+def _finish_match(match: Match, defeated_user_id: int, reason: MatchEndReason) -> None:
     """Único ponto que escreve o par (resultado, fase terminal).
 
     Privado de propósito: a invariante `outcome is not None` ⟺ `phase is
     FINISHED` vale porque existe um lugar só onde ela pode ser quebrada.
     """
-    match.outcome = outcome
+    match.outcome = MatchOutcome(defeated_user_id=defeated_user_id, reason=reason)
     match.phase = MatchPhase.FINISHED

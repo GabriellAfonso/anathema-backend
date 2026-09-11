@@ -33,6 +33,7 @@ from apps.game.match import (
     HealthModifier,
     Match,
     MatchDocument,
+    MatchEndReason,
     MatchOutcome,
     MatchPhase,
     match_from_document,
@@ -91,46 +92,45 @@ def test_a_running_match_is_not_over() -> None:
 
 def test_a_defeat_survives_the_round_trip() -> None:
     match = fake_match_in_progress()
-    match.outcome = MatchOutcome(defeated_user_ids=(PLAYER_ONE,))
+    match.outcome = MatchOutcome(
+        defeated_user_id=PLAYER_ONE, reason=MatchEndReason.NEXUS_DEPLETED
+    )
     match.phase = MatchPhase.FINISHED
 
-    assert round_trip(match).outcome == MatchOutcome(defeated_user_ids=(PLAYER_ONE,))
+    assert round_trip(match).outcome == MatchOutcome(
+        defeated_user_id=PLAYER_ONE, reason=MatchEndReason.NEXUS_DEPLETED
+    )
 
 
-def test_a_draw_survives_the_round_trip() -> None:
+def test_a_forfeit_survives_the_round_trip() -> None:
+    """O motivo volta, e volta como o enum."""
     match = fake_match_in_progress()
-    match.outcome = MatchOutcome(defeated_user_ids=(PLAYER_ONE, PLAYER_TWO))
+    match.outcome = MatchOutcome(
+        defeated_user_id=PLAYER_TWO, reason=MatchEndReason.FORFEIT
+    )
     match.phase = MatchPhase.FINISHED
 
     rebuilt = round_trip(match).outcome
 
     assert rebuilt is not None
-    assert rebuilt.is_draw is True
+    assert rebuilt.reason is MatchEndReason.FORFEIT
 
 
 def test_the_terminal_phase_comes_back_as_the_enum() -> None:
     match = fake_match_in_progress()
-    match.outcome = MatchOutcome(defeated_user_ids=(PLAYER_TWO,))
+    match.outcome = MatchOutcome(
+        defeated_user_id=PLAYER_TWO, reason=MatchEndReason.NEXUS_DEPLETED
+    )
     match.phase = MatchPhase.FINISHED
 
     assert round_trip(match).phase is MatchPhase.FINISHED
 
 
-def test_the_defeated_come_back_as_a_tuple_not_a_list() -> None:
-    """JSON não tem tupla; a volta reembrulha, como `CardId` já faz."""
-    match = fake_match_in_progress()
-    match.outcome = MatchOutcome(defeated_user_ids=(PLAYER_ONE,))
-    match.phase = MatchPhase.FINISHED
-
-    rebuilt = round_trip(match).outcome
-
-    assert rebuilt is not None
-    assert isinstance(rebuilt.defeated_user_ids, tuple)
-
-
 def test_a_finished_match_is_over_after_the_round_trip() -> None:
     match = fake_match_in_progress()
-    match.outcome = MatchOutcome(defeated_user_ids=(PLAYER_ONE,))
+    match.outcome = MatchOutcome(
+        defeated_user_id=PLAYER_ONE, reason=MatchEndReason.NEXUS_DEPLETED
+    )
     match.phase = MatchPhase.FINISHED
 
     assert round_trip(match).is_over is True
@@ -138,7 +138,9 @@ def test_a_finished_match_is_over_after_the_round_trip() -> None:
 
 def test_a_finished_document_is_stable_across_the_round_trip() -> None:
     match = fake_match_in_progress()
-    match.outcome = MatchOutcome(defeated_user_ids=(PLAYER_ONE,))
+    match.outcome = MatchOutcome(
+        defeated_user_id=PLAYER_ONE, reason=MatchEndReason.NEXUS_DEPLETED
+    )
     match.phase = MatchPhase.FINISHED
 
     assert to_match_document(round_trip(match)) == to_match_document(match)

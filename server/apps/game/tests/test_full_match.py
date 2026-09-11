@@ -47,7 +47,13 @@ from apps.game.engine import (
     PlayerAction,
     submit_action,
 )
-from apps.game.match import CardInstanceId, Match, MatchPhase, PlayerState
+from apps.game.match import (
+    CardInstanceId,
+    Match,
+    MatchEndReason,
+    MatchPhase,
+    PlayerState,
+)
 from apps.game.randomness import RandomSource
 from apps.game.tests.fake_random_source import ScriptedRandomSource
 from apps.game.tests.fake_setup import fake_match_in_action_phase
@@ -230,7 +236,7 @@ def test_a_full_match_runs_from_setup_to_victory(
     assert match.is_over
     assert match.phase is MatchPhase.FINISHED
     assert match.outcome is not None
-    assert len(match.outcome.defeated_user_ids) >= 1
+    assert match.outcome.reason is MatchEndReason.NEXUS_DEPLETED
 
 
 def test_the_loser_is_the_one_whose_nexus_reached_zero(
@@ -241,9 +247,9 @@ def test_the_loser_is_the_one_whose_nexus_reached_zero(
     play_until_over(match, catalog=catalog, source=source)
 
     assert match.outcome is not None
-    assert set(match.outcome.defeated_user_ids) == {
-        player.user_id for player in match.players if player.nexus <= 0
-    }
+    assert [player.user_id for player in match.players if player.nexus <= 0] == [
+        match.outcome.defeated_user_id
+    ]
 
 
 def test_the_combat_is_reached_at_least_once(

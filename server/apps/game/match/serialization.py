@@ -25,7 +25,7 @@ from .documents import (
     ModifierDocument,
     PlayerDocument,
 )
-from .match_outcome import MatchOutcome
+from .match_outcome import MatchEndReason, MatchOutcome
 from .match_state import Match, MatchPhase
 from .modifiers import (
     AttackModifier,
@@ -149,18 +149,21 @@ def to_match_outcome_document(
     if outcome is None:
         return None
 
-    return {"defeated_user_ids": list(outcome.defeated_user_ids)}
+    return {"defeated_user_id": outcome.defeated_user_id, "reason": outcome.reason}
 
 
 def match_outcome_from_document(
     document: MatchOutcomeDocument | None,
 ) -> MatchOutcome | None:
-    """A volta reembrulha a lista em tupla, e a validação da construção corre
-    de novo -- um documento corrompido é recusado na leitura, não usado."""
+    """A volta reembrulha o motivo no enum: um motivo desconhecido é recusado
+    na leitura, não usado."""
     if document is None:
         return None
 
-    return MatchOutcome(defeated_user_ids=tuple(document["defeated_user_ids"]))
+    return MatchOutcome(
+        defeated_user_id=document["defeated_user_id"],
+        reason=MatchEndReason(document["reason"]),
+    )
 
 
 def to_combat_document(combat: CombatState | None) -> CombatDocument | None:

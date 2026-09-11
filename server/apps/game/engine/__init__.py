@@ -108,7 +108,7 @@ from .round_cycle import (
     submit_action,
 )
 from .upkeep import MAX_ENERGY
-from .victory import change_nexus, change_nexus_simultaneously, check_victory
+from .victory import SimultaneousDefeatError, change_nexus, check_victory, forfeit
 
 __all__ = [
     # Compra (§9)
@@ -199,15 +199,14 @@ __all__ = [
     "BankUnitIsNotAUnitError",
     "deal_damage_to_unit",
     "bury_dead_units",
-    # Vitória (§10)
+    # Vitória e desistência (§10)
     #
-    # As três são públicas, e diferem em **quando** apuram: `change_nexus` a
-    # cada alteração (§5B), `change_nexus_simultaneously` uma vez depois de
-    # todas (§7.3), e `check_victory` só apura. Escolher a errada entre as duas
-    # primeiras é o bug que nenhum teste de um jogador só pega.
+    # `change_nexus` altera e apura; `check_victory` só apura; `forfeit` é a
+    # outra saída da partida, fora da vez e fora da união de ações.
     "change_nexus",
-    "change_nexus_simultaneously",
     "check_victory",
+    "forfeit",
+    "SimultaneousDefeatError",
     # Constantes da §12 aplicadas por este pacote
     "MAX_ENERGY",
     "MAX_BANK_SIZE",

@@ -19,6 +19,7 @@ from typing import Literal, TypedDict
 from apps.game.cards import EffectDuration
 from apps.players.services.player_queries import PlayerData
 
+from .match_outcome import MatchEndReason
 from .match_state import MatchPhase
 from .modifiers import ModifierKind
 
@@ -65,10 +66,11 @@ class BankUnitDocument(TypedDict):
 
 
 class MatchOutcomeDocument(TypedDict):
-    """Quem perdeu (§10). Lista e não tupla: JSON não tem tupla, e a volta
-    reembrulha -- como `CardId`, `CardInstanceId` e `RandomSeed` já fazem."""
+    """Quem perdeu, e por quê (§10). O motivo atravessa como string, e a volta
+    reembrulha no enum -- como `phase` já faz."""
 
-    defeated_user_ids: list[int]
+    defeated_user_id: int
+    reason: MatchEndReason
 
 
 class BlockAssignmentDocument(TypedDict):

@@ -33,7 +33,7 @@ from apps.game.match import (
 
 from .unit_damage import deal_damage_to_unit
 from .unit_vitals import unit_effective_attack
-from .victory import change_nexus_simultaneously
+from .victory import change_nexus
 
 # Um golpe planejado: em quem bate, e quanto. Tupla e não dataclass -- são dois
 # campos sem invariante própria, e a lista deles vive dentro de uma chamada só.
@@ -41,12 +41,12 @@ CombatStrike = tuple[BankUnit, int]
 
 
 def resolve_combat_damage(match: Match, *, catalog: CardCatalog) -> None:
-    """Todo o dano do combate, num evento só, e a §10 apurada **uma vez**.
+    """Todo o dano do combate, num evento só, e a §10 apurada no fim.
 
-    Os dois Nexus entram na apuração, inclusive o do atacante com 0: o Nexus do
-    atacante nunca recebe dano de combate (FR-057), e citá-lo mesmo assim é o
-    que faz "os dois alterados antes de apurar" ser o que o código faz, e não só
-    o que a §7.3 promete.
+    Só o Nexus do defensor muda: o do atacante nunca recebe dano de combate
+    (FR-057). Até a correção da nota de 2026-09-11 os dois entravam numa
+    apuração simultânea, para o empate da §10; sem empate, o dano do defensor
+    passa por `change_nexus` como qualquer outra alteração de Nexus.
 
     >>> resolve_combat_damage(match, catalog=catalog)
     >>> defender.nexus
@@ -61,9 +61,7 @@ def resolve_combat_damage(match: Match, *, catalog: CardCatalog) -> None:
     for unit, amount in strikes:
         deal_damage_to_unit(unit, amount)
 
-    change_nexus_simultaneously(
-        match, ((defender, -nexus_damage), (attacker_player, 0))
-    )
+    change_nexus(match, defender, -nexus_damage)
 
 
 def _attacking_player(match: Match) -> PlayerState:

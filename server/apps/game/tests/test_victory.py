@@ -11,12 +11,13 @@ import pytest
 from apps.game.cards import mvp_catalog
 from apps.game.engine import (
     MatchIsOverError,
+    SimultaneousDefeatError,
     PassAction,
     change_nexus,
     check_victory,
     submit_action,
 )
-from apps.game.match import Match, MatchOutcome, MatchPhase
+from apps.game.match import Match, MatchEndReason, MatchOutcome, MatchPhase
 from apps.game.randomness import RandomSource
 from apps.game.tests.fake_random_source import ScriptedRandomSource
 from apps.game.tests.fake_setup import fake_match_in_action_phase
@@ -43,7 +44,9 @@ def test_nexus_at_exactly_zero_defeats_the_player(match: Match) -> None:
     one, _ = match.players
     change_nexus(match, one, -one.nexus)
 
-    assert match.outcome == MatchOutcome(defeated_user_ids=(one.user_id,))
+    assert match.outcome == MatchOutcome(
+        defeated_user_id=one.user_id, reason=MatchEndReason.NEXUS_DEPLETED
+    )
 
 
 def test_a_defeated_match_reaches_the_terminal_phase(match: Match) -> None:
@@ -78,31 +81,23 @@ def test_the_nexus_has_no_upper_bound(match: Match) -> None:
     assert one.nexus == 25
 
 
-def test_both_players_at_zero_in_the_same_check_is_a_draw(match: Match) -> None:
-    """A §10: os dois Nexus <= 0 no mesmo cálculo."""
+def test_both_players_at_zero_is_refused_as_corrupted_state(match: Match) -> None:
+    """Não existe empate (§10, corrigida em 2026-09-11), e nenhuma regra leva os
+    dois a zero: o estado é recusado, e nenhum derrotado é escolhido."""
     one, two = match.players
     one.nexus = 0
     two.nexus = -2
 
-    check_victory(match)
+    with pytest.raises(SimultaneousDefeatError) as refusal:
+        check_victory(match)
 
-    assert match.outcome is not None
-    assert match.outcome.is_draw is True
-
-
-def test_the_draw_names_both_defeated_players(match: Match) -> None:
-    one, two = match.players
-    one.nexus = 0
-    two.nexus = 0
-
-    check_victory(match)
-
-    assert match.outcome == MatchOutcome(defeated_user_ids=(one.user_id, two.user_id))
+    assert set(refusal.value.user_ids) == {one.user_id, two.user_id}
+    assert match.outcome is None
 
 
 def test_check_victory_is_idempotent(match: Match) -> None:
-    """Chamar de novo não troca o resultado, que é o que permite ao combate
-    chamá-la depois do dano simultâneo sem contar as chamadas."""
+    """Chamar de novo não troca o resultado -- nem com o outro Nexus zerado
+    depois, que sem a idempotência seria o estado recusado acima."""
     one, two = match.players
     one.nexus = 0
     check_victory(match)
@@ -110,7 +105,9 @@ def test_check_victory_is_idempotent(match: Match) -> None:
     two.nexus = 0
     check_victory(match)
 
-    assert match.outcome == MatchOutcome(defeated_user_ids=(one.user_id,))
+    assert match.outcome == MatchOutcome(
+        defeated_user_id=one.user_id, reason=MatchEndReason.NEXUS_DEPLETED
+    )
 
 
 def test_a_later_heal_does_not_revive_a_finished_match(match: Match) -> None:
@@ -188,7 +185,9 @@ def test_the_refusal_names_the_defeated(match: Match, source: RandomSource) -> N
             randomness=source,
         )
 
-    assert refusal.value.outcome == MatchOutcome(defeated_user_ids=(holder,))
+    assert refusal.value.outcome == MatchOutcome(
+        defeated_user_id=holder, reason=MatchEndReason.NEXUS_DEPLETED
+    )
 
 
 def test_an_action_on_a_finished_match_changes_nothing(

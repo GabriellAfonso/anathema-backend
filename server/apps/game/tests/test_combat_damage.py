@@ -9,11 +9,8 @@ Ninguém morre nestes testes: este módulo acumula dano e altera Nexus, e a
 varredura da §7.4 é de `combat_cleanup.py`. O que se afirma aqui é
 `damage_taken`, não cemitério.
 
-O teste que carrega o arquivo é `test_two_nexus_at_zero_in_one_calculation_tie`:
-é ele que pega a escolha errada entre `change_nexus` e
-`change_nexus_simultaneously`. Com a errada, o empate da §10 vira vitória do
-segundo — e como `check_victory` é idempotente, a segunda apuração não corrige
-nada.
+Não existe empate (§10, corrigida em 2026-09-11): o dano de combate só atinge
+o Nexus do defensor, e a apuração nomeia um derrotado só.
 
 Os números vêm das cartas reais: DARK AGE 3/2, KHRAS 2/4, SKILLET 4/5,
 POLAROID 2/6, MORTEM 7/2.
@@ -23,7 +20,6 @@ import pytest
 
 from apps.game.cards import CardCatalog, CardId, EffectDuration, mvp_catalog
 from apps.game.engine import (
-    change_nexus_simultaneously,
     unit_effective_attack,
 )
 from apps.game.engine.combat_damage import resolve_combat_damage
@@ -120,43 +116,6 @@ def test_accumulated_damage_does_not_reduce_the_attack(
     unit.damage_taken = 1
 
     assert unit_effective_attack(unit, catalog=catalog) == 3
-
-
-# --- A apuração única --------------------------------------------------------
-
-
-def test_simultaneous_change_settles_after_every_nexus(
-    catalog: CardCatalog,
-) -> None:
-    match = board(catalog)
-    one, two = match.players
-
-    change_nexus_simultaneously(match, ((one, -5), (two, -5)))
-
-    assert (one.nexus, two.nexus) == (15, 15)
-    assert match.is_over is False
-
-
-def test_simultaneous_change_settles_only_once(catalog: CardCatalog) -> None:
-    """Os dois a zero no mesmo cálculo é empate (§10), e não vitória do
-    segundo."""
-    match = board(catalog)
-    one, two = match.players
-
-    change_nexus_simultaneously(match, ((one, -STARTING_NEXUS), (two, -STARTING_NEXUS)))
-
-    assert match.outcome is not None
-    assert set(match.outcome.defeated_user_ids) == {PLAYER_ONE, PLAYER_TWO}
-
-
-def test_a_single_defeat_still_names_one_player(catalog: CardCatalog) -> None:
-    match = board(catalog)
-    one, two = match.players
-
-    change_nexus_simultaneously(match, ((one, 0), (two, -STARTING_NEXUS)))
-
-    assert match.outcome is not None
-    assert match.outcome.defeated_user_ids == (PLAYER_TWO,)
 
 
 # --- Os pares ----------------------------------------------------------------
@@ -342,28 +301,7 @@ def test_an_attack_bonus_reaches_the_nexus(catalog: CardCatalog) -> None:
     assert match.players[1].nexus == STARTING_NEXUS - 6
 
 
-# --- O empate ----------------------------------------------------------------
-
-
-def test_two_nexus_at_zero_in_one_calculation_tie(catalog: CardCatalog) -> None:
-    """Não é alcançável jogando: nenhuma das cinco cartas do MVP subtrai Nexus
-    do oponente, e o dano de combate só chega ao Nexus do defensor. O estado é
-    montado, e a garantia é estrutural -- uma apuração, depois das duas
-    alterações.
-
-    Com `change_nexus` no lugar de `change_nexus_simultaneously`, este teste
-    devolve um derrotado só.
-    """
-    match = board(catalog, bank_one=(MORTEM,))
-    declare_combat(match, 0)
-    match.players[0].nexus = 0
-    match.players[1].nexus = 7
-
-    resolve_combat_damage(match, catalog=catalog)
-
-    assert match.outcome is not None
-    assert set(match.outcome.defeated_user_ids) == {PLAYER_ONE, PLAYER_TWO}
-    assert match.phase is MatchPhase.FINISHED
+# --- O Nexus do defensor ----------------------------------------------------------------
 
 
 def test_the_defender_alone_loses_when_only_their_nexus_reaches_zero(
@@ -376,7 +314,7 @@ def test_the_defender_alone_loses_when_only_their_nexus_reaches_zero(
     resolve_combat_damage(match, catalog=catalog)
 
     assert match.outcome is not None
-    assert match.outcome.defeated_user_ids == (PLAYER_TWO,)
+    assert match.outcome.defeated_user_id == PLAYER_TWO
 
 
 def test_a_nexus_at_exactly_zero_is_a_defeat(catalog: CardCatalog) -> None:

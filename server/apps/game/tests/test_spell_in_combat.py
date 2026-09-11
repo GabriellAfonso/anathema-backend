@@ -307,7 +307,7 @@ def test_a_defender_who_kills_themselves_freezes_the_combat(
 
     assert match.phase is MatchPhase.FINISHED
     assert match.outcome is not None
-    assert match.outcome.defeated_user_ids == (PLAYER_TWO,)
+    assert match.outcome.defeated_user_id == PLAYER_TWO
 
     with pytest.raises(MatchIsOverError):
         resolve(match, catalog=catalog, source=source)

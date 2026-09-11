@@ -26,7 +26,7 @@ from .documents import (
     ModifierDocument,
     PlayerDocument,
 )
-from .match_outcome import InvalidMatchOutcomeError, MatchOutcome
+from .match_outcome import MatchEndReason, MatchOutcome
 from .match_state import (
     Match,
     MatchIsNotInCombatError,
@@ -79,7 +79,7 @@ __all__ = [
     "STARTING_NEXUS",
     # Desfecho da partida (§10)
     "MatchOutcome",
-    "InvalidMatchOutcomeError",
+    "MatchEndReason",
     # Forma gravada
     "CardDocument",
     "ModifierDocument",
