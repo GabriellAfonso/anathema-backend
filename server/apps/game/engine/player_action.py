@@ -16,20 +16,22 @@ recebe a recusa de prioridade, nunca a de energia.
 A união é fechada, como `Card` em `cards/card.py` e `UnitModifier` em
 `match/modifiers.py`, e pela mesma razão: um `match` que esqueça um braço é erro
 de mypy, não bug em produção. Jogar feitiço entrou como braço novo na feature
-006, e as quatro ações do combate na 007, sem que a guarda comum nem a porta de
+006, e as ações do combate na 007, sem que a guarda comum nem a porta de
 `round_cycle` mudassem de forma -- que é exatamente o que a feature 005 escreveu
-prevendo.
+prevendo. Na 008 a união perdeu um braço, quando o feitiço da janela do defensor
+deixou de ser uma ação separada.
 
-**A exceção da §7.2 mora na ação, e é isso que a impede de vazar.** Na Fase de
-Ação quem age executa uma ação e a prioridade troca; na janela do defensor ela
-não troca. `keeps_priority` é a propriedade da ação que diz qual das duas vale,
-e `round_cycle._pass_priority` só a lê -- ela não conhece a §7.2, e as quatro
-ações da §5 declaram `False` cada uma por si.
+**Ficar com a vez mora na ação, e é isso que impede a exceção de vazar.** Quem
+joga unidade, declara ataque ou passa entrega a vez; quem joga feitiço (§5B, em
+qualquer fase) ou age na janela do defensor (§7.2) fica com ela.
+`keeps_priority` é a propriedade da ação que diz qual das duas vale, e
+`round_cycle._pass_priority` só a lê -- ela não conhece nenhuma das duas
+exceções, e cada braço declara a sua resposta por si.
 
 Os quatro braços da §5 ficam aqui, junto das guardas comuns que os consomem; os
-quatro da §7.2 ficam em `combat_action.py`, e o discriminante que os dois lados
-precisam, em `action_kind.py`. A união fechada é montada aqui porque é aqui que
-`ensure_action_allowed` a recebe.
+três exclusivos da §7.2 ficam em `combat_action.py`, e o discriminante que os
+dois lados precisam, em `action_kind.py`. A união fechada é montada aqui porque é
+aqui que `ensure_action_allowed` a recebe.
 
 Recusar é levantar, e é o oposto do `None` da compra da §9, de propósito: mão
 cheia é fluxo normal do jogo e por isso é valor de retorno; jogada ilegal é
@@ -53,7 +55,6 @@ from apps.game.match import (
 from .action_kind import ActionKind
 from .combat_action import (
     AssignBlockerAction,
-    CastCombatSpellAction,
     EndDefenseWindowAction,
     RemoveBlockerAction,
 )
@@ -81,14 +82,15 @@ class PlayUnitAction:
     # que `ensure_action_allowed` mude uma linha.
     allowed_phases: ClassVar[frozenset[MatchPhase]] = frozenset({MatchPhase.ACTION})
     # Se a ação devolve a vez. Mora na ação pela mesma razão que
-    # `allowed_phases` mora: a §5 escreve "depois de **qualquer** ação a
-    # prioridade passa ao oponente", e a §7.2 é a única exceção do jogo -- na
-    # janela do defensor ele age quantas vezes quiser sem devolver a vez.
+    # `allowed_phases` mora: a §5 escreve que a vez passa depois de jogar
+    # unidade, declarar ataque ou passar, e as exceções são duas -- jogar
+    # feitiço, que não gasta a vez (§5B), e a janela do defensor, em que ele age
+    # quantas vezes quiser (§7.2).
     #
-    # Escrever a exceção aqui, e não numa condição dentro de
-    # `round_cycle._pass_priority`, é o que a impede de vazar: quem lê aquela
-    # função não precisa saber da §7.2, e as quatro ações da Fase de Ação
-    # declaram `False` cada uma por si.
+    # Escrever as exceções aqui, e não numa condição dentro de
+    # `round_cycle._pass_priority`, é o que as impede de vazar: quem lê aquela
+    # função não precisa saber de nenhuma, e cada ação declara a sua resposta
+    # por si.
     #
     # Sem default, como `allowed_phases`: um braço novo que esqueça de
     # responder é erro de mypy, e a resposta errada por omissão seria
@@ -119,19 +121,20 @@ class PassAction:
 
 @dataclass(frozen=True, slots=True)
 class CastSpellAction:
-    """Lançar um feitiço da mão (§5B).
+    """Jogar um feitiço da mão (§5B), na Fase de Ação ou na janela do defensor.
 
     `target_card_instance_id` é anulável porque a ausência de alvo é estado
-    **legítimo** de três dos cinco feitiços do MVP, e não campo que alguém
-    esqueceu de preencher. Mesma forma e mesma razão de
-    `StackEntry.target_card_instance_id`, cujo docstring já separa as duas
-    perguntas: `None` é "não mira nada", nunca "o alvo sumiu".
+    **legítimo** de dois dos cinco feitiços do MVP, e não campo que alguém
+    esqueceu de preencher. `None` é "não mira nada" -- e não existe outro
+    significado, porque o feitiço resolve na hora e o alvo não tem como sumir
+    entre o lançamento e o efeito.
 
-    `{ACTION}` e não `{ACTION, COMBAT}`: o feitiço do defensor da §7.2 resolve
-    imediatamente, sem pilha e sem chance de resposta, e é outra ação -- não
-    esta com uma fase a mais. Essa outra é `CastCombatSpellAction`, logo abaixo,
-    e os dois braços têm os mesmos campos porque fazem coisas diferentes com
-    eles.
+    `{ACTION, COMBAT}` e `keeps_priority = True`: o Fluxo de Partida, corrigido
+    em 2026-09-11, faz o feitiço resolver na hora e não gastar a vez em qualquer
+    fase em que o jogador tem a prioridade. Até a feature 008 existiam duas
+    ações -- esta, que esperava dois passes para resolver e devolvia a vez, e
+    uma da §7.2 que resolvia na hora e ficava com ela. Sem a espera, as duas
+    faziam a mesma coisa com os mesmos campos, e ficou uma.
 
     >>> CastSpellAction(actor_user_id=7, card_instance_id=CardInstanceId(3),
     ...                 target_card_instance_id=CardInstanceId(11))
@@ -140,8 +143,10 @@ class CastSpellAction:
     """
 
     action_kind: ClassVar[ActionKind] = ActionKind.CAST_SPELL
-    allowed_phases: ClassVar[frozenset[MatchPhase]] = frozenset({MatchPhase.ACTION})
-    keeps_priority: ClassVar[bool] = False
+    allowed_phases: ClassVar[frozenset[MatchPhase]] = frozenset(
+        {MatchPhase.ACTION, MatchPhase.COMBAT}
+    )
+    keeps_priority: ClassVar[bool] = True
 
     actor_user_id: int
     card_instance_id: CardInstanceId
@@ -168,8 +173,9 @@ class DeclareAttackAction:
 
     action_kind: ClassVar[ActionKind] = ActionKind.DECLARE_ATTACK
     allowed_phases: ClassVar[frozenset[MatchPhase]] = frozenset({MatchPhase.ACTION})
-    # `False`: declarar ataque é ação da §5 como as outras três, e a prioridade
-    # passa ao oponente -- que é exatamente o defensor de quem a §7.2 fala.
+    # `False`: declarar ataque gasta a vez como jogar unidade e passar, e a
+    # prioridade passa ao oponente -- que é exatamente o defensor de quem a §7.2
+    # fala.
     keeps_priority: ClassVar[bool] = False
 
     actor_user_id: int
@@ -185,7 +191,6 @@ PlayerAction = (
     | DeclareAttackAction
     | AssignBlockerAction
     | RemoveBlockerAction
-    | CastCombatSpellAction
     | EndDefenseWindowAction
 )
 

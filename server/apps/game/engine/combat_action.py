@@ -1,13 +1,17 @@
-"""A forma das quatro ações da janela do defensor (§7.2).
+"""A forma das três ações que só existem na janela do defensor (§7.2).
 
 Separadas dos braços da §5 porque a responsabilidade é outra, e a diferença
 está numa linha de cada uma: `allowed_phases` é `{COMBAT}` e `keeps_priority` é
-`True`. As duas juntas são a exceção à alternância da §5 -- a única do jogo --,
-e tê-las num arquivo próprio deixa a exceção visível em vez de diluída entre
-oito dataclasses.
+`True`. Tê-las num arquivo próprio deixa a janela visível em vez de diluída
+entre sete dataclasses.
+
+A quarta coisa que o defensor faz na janela é jogar feitiço, e ela não mora
+aqui: é `CastSpellAction`, a mesma ação da Fase de Ação, em `player_action.py`.
+Até a feature 008 existia um feitiço só da janela, e ele deixou de ter o que o
+distinguisse.
 
 Nenhuma delas executa nada. A regra de cada uma mora no módulo dela:
-`blocker_pairing.py`, `cast_combat_spell.py` e `combat_cleanup.py`.
+`blocker_pairing.py` e `combat_cleanup.py`.
 
 A união fechada que as reúne com as da §5 é `PlayerAction`, em
 `player_action.py` -- lá porque é lá que moram as guardas comuns que a
@@ -67,35 +71,6 @@ class RemoveBlockerAction:
 
     actor_user_id: int
     blocker_card_instance_id: CardInstanceId
-
-
-@dataclass(frozen=True, slots=True)
-class CastCombatSpellAction:
-    """Lançar um feitiço dentro da janela do defensor (§7.2).
-
-    Mesmos campos de `CastSpellAction`, e braço próprio mesmo assim: as duas
-    ações fazem coisas diferentes com eles. A da §5B empilha e devolve a vez; a
-    desta resolve na hora, sem pilha e sem chance de resposta. `CastSpellAction`
-    já dizia isso de si mesma antes desta existir -- "é outra ação, não esta com
-    uma fase a mais".
-
-    `target_card_instance_id` é anulável pela mesma razão de lá: três dos cinco
-    feitiços do MVP não miram nada, e `None` é "não mira", nunca "o alvo sumiu".
-
-    >>> CastCombatSpellAction(actor_user_id=9,
-    ...                       card_instance_id=CardInstanceId(3),
-    ...                       target_card_instance_id=CardInstanceId(11))
-    CastCombatSpellAction(actor_user_id=9, card_instance_id=3,
-                          target_card_instance_id=11)
-    """
-
-    action_kind: ClassVar[ActionKind] = ActionKind.CAST_COMBAT_SPELL
-    allowed_phases: ClassVar[frozenset[MatchPhase]] = frozenset({MatchPhase.COMBAT})
-    keeps_priority: ClassVar[bool] = True
-
-    actor_user_id: int
-    card_instance_id: CardInstanceId
-    target_card_instance_id: CardInstanceId | None = None
 
 
 @dataclass(frozen=True, slots=True)

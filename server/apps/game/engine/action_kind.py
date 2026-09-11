@@ -12,9 +12,10 @@ from enum import StrEnum
 class ActionKind(StrEnum):
     """Discriminante da união, e o que o envelope de websocket vai carregar.
 
-    Conjunto fechado, e **completo**: quatro ações da Fase de Ação (§5) e
-    quatro da janela do defensor (§7.2). O Fluxo de Partida não tem uma nona em
-    lugar nenhum, e por isso esta lista não cresce mais.
+    Conjunto fechado: as quatro ações da Fase de Ação (§5) -- jogar feitiço
+    incluído, que também vale na janela do defensor -- e as três que só existem
+    na janela (§7.2). Eram oito até a feature 008, quando o feitiço da janela
+    deixou de ser uma ação separada.
     """
 
     PLAY_UNIT = "play_unit"
@@ -23,5 +24,4 @@ class ActionKind(StrEnum):
     DECLARE_ATTACK = "declare_attack"
     ASSIGN_BLOCKER = "assign_blocker"
     REMOVE_BLOCKER = "remove_blocker"
-    CAST_COMBAT_SPELL = "cast_combat_spell"
     END_DEFENSE_WINDOW = "end_defense_window"

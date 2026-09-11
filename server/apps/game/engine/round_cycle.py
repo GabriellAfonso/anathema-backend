@@ -23,14 +23,12 @@ from apps.game.match import Match, MatchPhase, PlayerState
 from apps.game.randomness import RandomSource
 
 from .blocker_pairing import assign_blocker, remove_blocker
-from .cast_combat_spell import cast_combat_spell
 from .cast_spell import cast_spell
 from .combat_cleanup import end_combat
 from .declare_attack import declare_attack
 from .play_unit import play_unit
 from .combat_action import (
     AssignBlockerAction,
-    CastCombatSpellAction,
     EndDefenseWindowAction,
     RemoveBlockerAction,
 )
@@ -43,7 +41,6 @@ from .player_action import (
     ensure_action_allowed,
 )
 from .round_end import end_round
-from .stack_resolution import resolve_stack
 from .upkeep import run_upkeep
 
 # Fluxo de Partida §5, "Saída da fase". Dois, e não "todos os jogadores
@@ -123,7 +120,7 @@ def submit_action(
 
     _pass_priority(match, action)
     _exit_action_phase(match)
-    _settle(match, randomness, catalog)
+    _settle(match, randomness)
 
 
 def _apply_action(
@@ -150,8 +147,6 @@ def _apply_action(
             assign_blocker(match, actor, action)
         case RemoveBlockerAction():
             remove_blocker(match, action)
-        case CastCombatSpellAction():
-            cast_combat_spell(match, actor, action, catalog=catalog)
         case EndDefenseWindowAction():
             end_combat(match, catalog=catalog)
         case PassAction():
@@ -166,17 +161,18 @@ def _pass_turn(match: Match) -> None:
 
 
 def _pass_priority(match: Match, action: PlayerAction) -> None:
-    """A prioridade passa ao oponente do autor, depois de qualquer ação (§5).
+    """A prioridade passa ao oponente do autor, depois da ação que gasta a vez.
 
     Usa `action.actor_user_id` em vez de `match.priority_user_id` porque a
     guarda comum já provou que os dois são o mesmo -- e este é um `int`, não um
     `int | None`.
 
-    O `return` é a janela do defensor da §7.2, a única exceção à alternância em
-    todo o jogo: ele bloqueia, desbloqueia e conjura quantas vezes quiser sem
-    devolver a vez. A exceção é propriedade **da ação**, como `allowed_phases`
-    já é, e é por isso que ela não vaza para a Fase de Ação -- todos os braços
-    da §5 declaram `keeps_priority = False`.
+    O `return` são as duas exceções à alternância: jogar feitiço, que não gasta
+    a vez em fase nenhuma (§5B), e a janela do defensor, em que ele bloqueia e
+    desbloqueia quantas vezes quiser (§7.2). As exceções são propriedade **da
+    ação**, como `allowed_phases` já é, e é por isso que não vazam -- jogar
+    unidade, declarar ataque e passar declaram `keeps_priority = False` cada um
+    por si.
     """
     if action.keeps_priority:
         return
@@ -185,51 +181,41 @@ def _pass_priority(match: Match, action: PlayerAction) -> None:
 
 
 def _exit_action_phase(match: Match) -> None:
-    """A saída da §5, verificada depois de toda ação.
+    """A saída da §5, verificada depois de toda ação: dois passes seguidos
+    fecham a rodada.
 
-    Os dois ramos existem desde a feature 005, e o da pilha cheia passou a ter
-    consumidor na 006: `cast_spell` enche a pilha, e a Resolução de Pilha da §6
-    a esvazia. Nenhuma linha desta função mudou para isso acontecer, que era
-    exatamente o ponto de escrevê-la assim antes de haver o que resolver.
+    Um ramo só. Até a feature 008 havia um segundo, que mandava a partida
+    resolver os feitiços pendentes antes; com o feitiço resolvendo na hora em
+    que é jogado, não sobra nada pendente, e dois passes são sempre Fim de
+    Rodada. Fora da Fase de Ação ninguém passa, e os passes ficam em 0 -- é isso
+    que deixa esta função inerte durante o combate.
     """
     if match.consecutive_passes < CONSECUTIVE_PASSES_TO_EXIT:
-        return
-
-    if match.stack:
-        match.phase = MatchPhase.STACK_RESOLUTION
         return
 
     match.phase = MatchPhase.ROUND_END
 
 
-def _settle(match: Match, randomness: RandomSource, catalog: CardCatalog) -> None:
+def _settle(match: Match, randomness: RandomSource) -> None:
     """Atravessa toda fase automática até a partida voltar a esperar ação.
 
     Laço, e não uma sequência fixa de chamadas: a saída da §5 é quem decide qual
-    fase vem, e a feature de pilha acrescentou um braço aqui sem tocar em mais
-    nada -- que era o que a feature 005 previu ao escrevê-lo como laço.
+    fase vem, e o laço atravessa o que estiver lá. A feature 006 acrescentou um
+    braço aqui e a 008 o tirou, sem que o laço mudasse de forma -- que era o que
+    a feature 005 previu ao escrevê-lo assim.
 
-    Termina sempre, e em no máximo duas voltas. `STACK_RESOLUTION` leva a
-    `ACTION` ou a `FINISHED`; `ROUND_END` leva a `UPKEEP`; `UPKEEP` leva a
-    `ACTION`. Nenhuma fase automática leva a outra que volte à primeira -- a
-    Resolução de Pilha em particular zera os passes antes de devolver a Fase de
-    Ação, e é isso que a impede de cair no Fim de Rodada.
+    Termina sempre, em no máximo uma volta completa: `ROUND_END` leva a
+    `UPKEEP`, e `UPKEEP` leva a `ACTION`.
 
     `FINISHED` não está entre as automáticas, então a partida encerrada para o
     laço sem que ele precise saber da §10.
     """
     while match.phase in _AUTOMATIC_PHASES:
-        _run_automatic_phase(match, randomness, catalog)
+        _run_automatic_phase(match, randomness)
 
 
-def _run_automatic_phase(
-    match: Match, randomness: RandomSource, catalog: CardCatalog
-) -> None:
+def _run_automatic_phase(match: Match, randomness: RandomSource) -> None:
     """Um passo da cascata. Cada fase automática sabe para onde vai."""
-    if match.phase is MatchPhase.STACK_RESOLUTION:
-        resolve_stack(match, catalog=catalog)
-        return
-
     if match.phase is MatchPhase.ROUND_END:
         end_round(match)
         return
@@ -237,6 +223,4 @@ def _run_automatic_phase(
     run_upkeep(match, randomness=randomness)
 
 
-_AUTOMATIC_PHASES = frozenset(
-    {MatchPhase.STACK_RESOLUTION, MatchPhase.ROUND_END, MatchPhase.UPKEEP}
-)
+_AUTOMATIC_PHASES = frozenset({MatchPhase.ROUND_END, MatchPhase.UPKEEP})

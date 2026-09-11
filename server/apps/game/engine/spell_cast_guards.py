@@ -1,16 +1,12 @@
 """As quatro guardas que todo lançamento de feitiço faz, e as cinco recusas
 delas.
 
-Dois caminhos lançam feitiço, e os dois fazem as mesmas perguntas na mesma
-ordem: a §5B, que empilha, e a §7.2, que resolve na hora. Escrevê-las duas vezes
-seria duplicar a regra; deixá-las em `cast_spell.py` poria o módulo cujo
-docstring diz "a ação B da §5" como dono das guardas de uma ação que não é da
-§5.
-
-É o mesmo movimento que a feature 006 fez ao subir `card_in_hand` e
-`ensure_enough_energy` para `player_action.py`, e que a 005 tinha feito ao subir
-`CardNotInHandError` de `mulligan.py`. A prova de que foi só mudança de casa é
-`test_cast_spell.py` passar sem uma linha alterada.
+Nasceram em `cast_spell.py` e subiram para cá na feature 007, quando dois
+caminhos lançavam feitiço com as mesmas perguntas na mesma ordem. Desde a
+feature 008 o caminho é um só -- `cast_spell`, nas duas fases --, e as guardas
+ficaram aqui: com as cinco recusas elas formam um módulo coeso por si, e é o
+mesmo movimento que a feature 006 fez ao subir `card_in_hand` e
+`ensure_enough_energy` para `player_action.py`.
 
     1. a carta citada está na mão do autor
     2. a carta é um feitiço
@@ -25,9 +21,8 @@ na recusa de energia --, e o efeito antes da quarta -- sem ele não há
 atribuição de quem chama, e é essa ordem que garante que uma recusa deixa o
 estado idêntico.
 
-A porta devolve o `BankUnit` do alvo, e não só valida o lado. O caminho da pilha
-ignora o valor -- ele revalida por identificador na resolução, porque o alvo pode
-sumir no caminho; o caminho do combate aplica o efeito na hora e precisa dele.
+A porta devolve o `BankUnit` do alvo, e não só valida o lado: `cast_spell`
+aplica o efeito na mesma chamada, e precisa dele.
 
 O motor decide exigência de alvo, tipo de alvo e duração pelos campos
 estruturados do catálogo. Regra que dependa de `Spell.description` é bug, e
@@ -46,6 +41,7 @@ from apps.game.match import (
 )
 
 from .player_action import (
+    CastSpellAction,
     IllegalActionError,
     card_in_hand,
     ensure_enough_energy,
@@ -143,10 +139,9 @@ class WrongSpellTargetSideError(IllegalActionError):
 class SpellTargetNotOnBattlefieldError(IllegalActionError):
     """O alvo não está em banco nenhum, no momento do lançamento.
 
-    **Não é fizzle.** Fizzle é o alvo sumir *entre* o lançamento e a resolução,
-    e consome a jogada; isto a rejeita. Mesmo fato, momentos diferentes,
-    respostas opostas. O feitiço imediato da §7.2 nunca fizzla, justamente
-    porque nele não existe esse intervalo.
+    É sempre recusa, e nunca um feitiço aceito que não faz nada: o efeito é
+    aplicado na mesma chamada que valida o alvo, então não existe intervalo em
+    que ele pudesse sumir.
 
     >>> raise SpellTargetNotOnBattlefieldError(CardInstanceId(11))
     SpellTargetNotOnBattlefieldError: card instance 11 is not on the
@@ -165,8 +160,8 @@ class SpellTargetNotOnBattlefieldError(IllegalActionError):
 class ValidatedSpellCast:
     """O que as quatro guardas apuraram, para quem chamou não reapurar.
 
-    `target is None` significa que o efeito **não mira nada**, nunca que o alvo
-    sumiu -- a mesma separação que `StackEntry.target_card_instance_id` escreve.
+    `target is None` significa que o efeito **não mira nada**. Não tem outro
+    significado: a guarda recusa alvo fora de campo, e o efeito vem logo depois.
 
     >>> validated.spell.energy
     2
@@ -180,27 +175,26 @@ class ValidatedSpellCast:
 def validated_spell_cast(
     match: Match,
     actor: PlayerState,
-    card_instance_id: CardInstanceId,
-    target_card_instance_id: CardInstanceId | None,
+    action: CastSpellAction,
     *,
     catalog: CardCatalog,
 ) -> ValidatedSpellCast:
-    """As quatro guardas da §5B, na ordem, sem aplicar nem empilhar nada.
+    """As quatro guardas da §5B, na ordem, sem aplicar nada.
 
-    Recebe os dois identificadores soltos e não a ação: os dois braços que a
-    chamam são tipos diferentes -- `CastSpellAction` e `CastCombatSpellAction`
-    --, e pedir "uma ação com estes dois campos" obrigaria a inventar um
-    `Protocol` para uma união que já é fechada.
+    Recebe a ação inteira. Até a feature 008 recebia os dois identificadores
+    soltos, porque dois tipos de ação diferentes a chamavam; hoje é um só.
 
-    >>> validated_spell_cast(match, actor, CardInstanceId(3), None,
+    >>> validated_spell_cast(match, actor, CastSpellAction(7, CardInstanceId(3)),
     ...                      catalog=catalog).spell.energy
     4
     """
-    card = card_in_hand(actor, card_instance_id)
+    card = card_in_hand(actor, action.card_instance_id)
     spell = _as_spell(card, catalog)
 
     ensure_enough_energy(actor, card, spell.energy)
-    target = _validated_target(match, actor, card, spell, target_card_instance_id)
+    target = _validated_target(
+        match, actor, card, spell, action.target_card_instance_id
+    )
 
     return ValidatedSpellCast(card=card, spell=spell, target=target)
 

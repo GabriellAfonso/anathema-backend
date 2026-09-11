@@ -6,14 +6,16 @@ compra, se troca carta e se sorteia o dono do token.
 
 Moram aqui o setup da §3, a compra com reset de deck da §9, o ciclo de rodada
 das §4, §5 e §8 -- o Upkeep, a Fase de Ação com as quatro ações que existem, e o
-Fim de Rodada --, a pilha de feitiços da §6 com os cinco efeitos do MVP, o
+Fim de Rodada --, o feitiço imediato da §5B com os cinco efeitos do MVP, o
 combate da §7 com a janela livre do defensor e o dano simultâneo, e a condição
 de vitória da §10.
 
-Com o combate, o Fluxo de Partida está implementado de ponta a ponta: uma
-partida roda do setup da §3 à vitória da §10 sem tocar em websocket. O que a
-nota deixa em aberto -- timeout de jogada, palavras-chave de carta -- continua
-na §13 dela, e é problema de transporte ou de balanceamento, não deste pacote.
+Uma partida roda do setup da §3 à vitória da §10 sem tocar em websocket. A nota
+foi corrigida duas vezes em 2026-09-11: a primeira correção (feitiço que
+resolve na hora e não gasta a vez) é a feature 008; a segunda -- energia que acumula, a
+declaração como janela, regra própria de SACRIFICIAL FIRE e MAGIC BARRIER, a
+desistência -- ainda não está aqui. O relógio da vez (§15) é problema de
+transporte, não deste pacote.
 
 >>> from apps.game.engine import MatchEntry, start_match
 >>> match = start_match(one, two, catalog=catalog, randomness=source, seed=seed)
@@ -44,7 +46,6 @@ from .declare_attack import (
     DuplicateAttackerError,
     NoAttackersSelectedError,
     NotTheTokenHolderError,
-    StackIsNotEmptyError,
 )
 from .deck_reset import reset_deck_from_graveyard
 from .match_setup import (
@@ -65,7 +66,6 @@ from .play_unit import (
 from .action_kind import ActionKind
 from .combat_action import (
     AssignBlockerAction,
-    CastCombatSpellAction,
     EndDefenseWindowAction,
     RemoveBlockerAction,
 )
@@ -133,10 +133,9 @@ __all__ = [
     "DeclareAttackAction",
     "PassAction",
     "PlayerAction",
-    # A forma da ação na janela do defensor (§7.2)
+    # A forma das ações que só existem na janela do defensor (§7.2)
     "AssignBlockerAction",
     "RemoveBlockerAction",
-    "CastCombatSpellAction",
     "EndDefenseWindowAction",
     # Recusas de jogada (§5)
     "IllegalActionError",
@@ -162,7 +161,6 @@ __all__ = [
     # quem a chama é `round_cycle`.
     "NotTheTokenHolderError",
     "AttackTokenAlreadyConsumedError",
-    "StackIsNotEmptyError",
     "BankHasNoUnitsError",
     "NoAttackersSelectedError",
     "AttackerNotInBankError",

@@ -1,23 +1,25 @@
 """A ação C da §5: declarar ataque, e com ela a entrada do combate da §7.1.
 
-Seis perguntas, nesta ordem, e a ordem é parte da regra:
+Cinco perguntas, nesta ordem, e a ordem é parte da regra:
 
     1. o autor é o dono do token de ataque
     2. o token ainda não foi consumido nesta rodada
-    3. a pilha está vazia
-    4. o banco do autor tem alguma unidade
-    5. a seleção tem ao menos uma unidade
-    6. cada unidade citada está no banco do autor, uma vez só
+    3. o banco do autor tem alguma unidade
+    4. a seleção tem ao menos uma unidade
+    5. cada unidade citada está no banco do autor, uma vez só
+
+Eram seis até a feature 008: a terceira exigia que nenhum feitiço estivesse
+esperando para resolver, e com o feitiço resolvendo na hora nunca há.
 
 As gerais e baratas vêm antes; a que cita uma unidade específica vem por
 último. É a mesma disciplina de `cast_spell.py`, em que a carta precisa ser
 resolvida antes de se poder citar o custo dela na recusa de energia.
 
-A 4 vem antes da 5 de propósito. São fatos diferentes -- banco vazio é "não há
+A 3 vem antes da 4 de propósito. São fatos diferentes -- banco vazio é "não há
 o que atacar", seleção vazia é "há, e você não escolheu nada" --, e colapsá-las
 esconderia qual dos dois clientes está quebrado.
 
-As seis acontecem **antes** da primeira atribuição, como em `play_unit.py`. É a
+As cinco acontecem **antes** da primeira atribuição, como em `play_unit.py`. É a
 ordem que garante que uma recusa deixa o estado idêntico, e não um rollback que
 alguém teria de manter completo.
 
@@ -76,24 +78,6 @@ class AttackTokenAlreadyConsumedError(IllegalActionError):
         )
         self.user_id = user_id
         self.round_number = round_number
-
-
-class StackIsNotEmptyError(IllegalActionError):
-    """A §5C exige pilha vazia. O combate não usa a pilha, e deixar feitiço
-    pendente entrando nele daria um efeito resolvendo depois do dano.
-
-    >>> raise StackIsNotEmptyError(2, "m-1")
-    StackIsNotEmptyError: match 'm-1' has 2 pending spells: expected an empty
-    stack to declare an attack
-    """
-
-    def __init__(self, stack_size: int, match_id: str) -> None:
-        super().__init__(
-            f"match {match_id!r} has {stack_size} pending spells: expected an "
-            f"empty stack to declare an attack"
-        )
-        self.stack_size = stack_size
-        self.match_id = match_id
 
 
 class BankHasNoUnitsError(IllegalActionError):
@@ -194,7 +178,6 @@ def declare_attack(
     """
     _ensure_actor_holds_the_token(match, actor)
     _ensure_token_is_unconsumed(match, actor)
-    _ensure_stack_is_empty(match)
     _ensure_bank_has_units(actor)
     _ensure_selection_is_not_empty(actor, action)
     _ensure_every_attacker_is_in_the_bank(actor, action)
@@ -224,16 +207,8 @@ def _ensure_token_is_unconsumed(match: Match, actor: PlayerState) -> None:
     )
 
 
-def _ensure_stack_is_empty(match: Match) -> None:
-    """Guarda 3: o combate não usa a pilha, e não entra com ela cheia."""
-    if not match.stack:
-        return
-
-    raise StackIsNotEmptyError(len(match.stack), match.match_id)
-
-
 def _ensure_bank_has_units(actor: PlayerState) -> None:
-    """Guarda 4: há o que atacar."""
+    """Guarda 3: há o que atacar."""
     if actor.bank:
         return
 
@@ -243,7 +218,7 @@ def _ensure_bank_has_units(actor: PlayerState) -> None:
 def _ensure_selection_is_not_empty(
     actor: PlayerState, action: DeclareAttackAction
 ) -> None:
-    """Guarda 5: e alguma coisa foi escolhida."""
+    """Guarda 4: e alguma coisa foi escolhida."""
     if action.attacker_card_instance_ids:
         return
 
@@ -253,7 +228,7 @@ def _ensure_selection_is_not_empty(
 def _ensure_every_attacker_is_in_the_bank(
     actor: PlayerState, action: DeclareAttackAction
 ) -> None:
-    """Guarda 6: cada unidade citada está no banco do autor, uma vez só.
+    """Guarda 5: cada unidade citada está no banco do autor, uma vez só.
 
     A ausência é verificada antes da repetição: citar uma unidade que não
     existe é erro mais básico que citá-la duas vezes, e uma seleção com os dois

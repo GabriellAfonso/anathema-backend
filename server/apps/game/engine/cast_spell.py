@@ -1,25 +1,28 @@
-"""A ação B da §5: lançar um feitiço da mão, pela pilha.
+"""A ação B da §5: jogar um feitiço da mão, e o efeito **agora**.
 
-As quatro guardas do lançamento moram em `spell_cast_guards.py`, porque a §7.2
-faz as mesmas na mesma ordem. O que é **desta** ação é o que acontece depois
-delas: descontar a energia, tirar a carta da mão, e empilhar.
+Fluxo de Partida, corrigido em 2026-09-11: o feitiço resolve na hora em que é
+jogado, em qualquer fase em que o jogador tem a prioridade -- a Fase de Ação e a
+janela do defensor da §7.2 --, e não gasta a vez. Este módulo é o único caminho
+de lançamento das duas fases.
 
-**O efeito não acontece aqui.** O feitiço vai para o topo da pilha e resolve
-depois, quando os dois jogadores passarem (§6). É essa espera que dá ao oponente
-a chance de responder, e é a única diferença entre esta ação e a §5A -- e entre
-ela e o feitiço imediato da §7.2, que resolve na hora e não dá resposta nenhuma.
+As guardas moram em `spell_cast_guards.py` e o aplicador em `spell_effect.py`, e
+nenhum dos dois recebe parâmetro dizendo de que fase a chamada veio. É essa
+ausência que impede os cinco efeitos de terem uma segunda implementação a manter
+igual à mão.
 
-A entrada da pilha guarda o **identificador** do alvo, e não o `BankUnit` que a
-guarda já resolveu: entre o lançamento e a resolução o alvo pode sumir, e é a
-revalidação por identificador que torna o fizzle possível. O
-`ValidatedSpellCast.target` é descartado aqui de propósito.
+Um feitiço aceito sempre faz efeito: não há intervalo entre validar o alvo e
+aplicá-lo. Alvo fora de campo é recusa da guarda, sempre.
+
+A prioridade não é devolvida, e não é este módulo que decide isso:
+`CastSpellAction.keeps_priority` é `True`, e quem lê é `round_cycle`.
 """
 
 from apps.game.cards import CardCatalog
-from apps.game.match import Match, PlayerState, StackEntry
+from apps.game.match import Match, PlayerState
 
 from .player_action import CastSpellAction
 from .spell_cast_guards import validated_spell_cast
+from .spell_effect import apply_spell_effect
 
 
 def cast_spell(
@@ -29,35 +32,30 @@ def cast_spell(
     *,
     catalog: CardCatalog,
 ) -> None:
-    """A §5B: desconta a energia, tira a carta da mão, empilha o feitiço.
+    """A §5B: desconta a energia, tira a carta da mão, aplica o efeito e manda a
+    carta ao cemitério.
 
-    Recebe o `actor` que `ensure_action_allowed` já buscou, como `play_unit`.
+    O cemitério vem **depois** do efeito, e não antes: uma unidade morta pelo
+    efeito entra no cemitério antes da carta do feitiço. É a ordem que a feature
+    007 fixou para o feitiço da janela do defensor, e a que os dois lados de
+    `test_both_phases_give_the_same_state` comparam.
 
-    Zera a contagem de passes, inclusive quando o oponente já tinha passado uma
-    vez: a §5 conta passes **consecutivos**, e uma jogada quebra a sequência.
-
-    A prioridade **não** é trocada aqui -- quem troca é `submit_action`, depois
-    de toda ação. É essa troca que dá ao oponente a chance de responder no topo.
+    Zera a contagem de passes nas duas fases. Na janela do defensor ela já está
+    em 0 -- a declaração zerou e a limpeza da §7.4 zera de novo --, e escrever
+    a zeragem sem condição evita um `if` de fase, que seria o primeiro passo
+    para os dois lados divergirem. Na Fase de Ação é o que garante que um passe
+    depois do feitiço não feche a rodada sem o oponente receber a vez.
 
     >>> cast_spell(match, actor, action, catalog=catalog)
-    >>> match.stack[-1].caster_user_id
-    7
+    >>> match.consecutive_passes
+    0
     """
-    validated = validated_spell_cast(
-        match,
-        actor,
-        action.card_instance_id,
-        action.target_card_instance_id,
-        catalog=catalog,
-    )
+    validated = validated_spell_cast(match, actor, action, catalog=catalog)
 
     actor.energy_current -= validated.spell.energy
     actor.hand.remove(validated.card)
-    match.stack.append(
-        StackEntry(
-            card=validated.card,
-            caster_user_id=actor.user_id,
-            target_card_instance_id=action.target_card_instance_id,
-        )
+    apply_spell_effect(
+        match, actor, validated.spell.effect, validated.target, catalog=catalog
     )
+    actor.graveyard.append(validated.card)
     match.consecutive_passes = 0
