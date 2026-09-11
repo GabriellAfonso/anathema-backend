@@ -126,8 +126,10 @@ class SacrificeNexusForAttack(SpellEffectShape):
     attack_bonus: int
 
 
-# União fechada: quando a pilha de feitiços for implementada, um `match` que
-# esqueça um braço é erro de mypy, não bug em produção.
+# União fechada: o `match` que a executa é `engine/spell_effect.py`, e um braço
+# esquecido lá é erro de mypy, não bug em produção. Ele fecha o `match` com
+# `assert_never`, que é o que torna a exaustividade verificada num despacho que
+# devolve `None`.
 SpellEffect = (
     BuffUnitHealth
     | PreventUnitDamage
