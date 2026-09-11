@@ -90,5 +90,5 @@ Decisions in force:
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/006-spell-stack-effects/plan.md`
+`specs/007-combat-phase/plan.md`
 <!-- SPECKIT END -->
