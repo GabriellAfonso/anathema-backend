@@ -184,3 +184,73 @@ async def test_disconnect_leaves_the_per_user_group(calls: list[str]) -> None:
     layer = get_channel_layer()
 
     assert layer.groups.get(RecordingConsumer.user_group(7), {}) == {}
+
+
+# --- Recusa de mensagem (feature 009) ------------------------------------------
+
+
+async def refused_frame(client: WebsocketTestClient) -> dict[str, object]:
+    frame = await client.receive_json_from()
+    assert frame["type"] == "message_refused"
+    payload = frame["payload"]
+    assert isinstance(payload, dict)
+
+    return payload
+
+
+async def open_client(calls: list[str]) -> WebsocketTestClient:
+    client = connect_as(FakePlayerUser(7), calls)
+    await client.connect()
+
+    return client
+
+
+async def test_a_message_without_type_is_refused(calls: list[str]) -> None:
+    client = await open_client(calls)
+
+    await client.send_json_to({"payload": {}})
+
+    assert (await refused_frame(client))["code"] == "malformed_message"
+    await client.disconnect()
+
+
+async def test_a_type_without_handler_is_refused(calls: list[str]) -> None:
+    client = await open_client(calls)
+
+    await client.send_json_to({"type": "banana"})
+
+    payload = await refused_frame(client)
+    assert payload["code"] == "unknown_message_type"
+    assert "banana" in str(payload["error"])
+    await client.disconnect()
+
+
+async def test_invalid_json_is_refused_and_the_socket_stays_open(
+    calls: list[str],
+) -> None:
+    client = await open_client(calls)
+
+    await client.send_raw_text("{not json")
+    assert (await refused_frame(client))["code"] == "malformed_message"
+
+    await client.send_json_to({"type": "banana"})
+    assert (await refused_frame(client))["code"] == "unknown_message_type"
+    await client.disconnect()
+
+
+async def test_a_json_value_that_is_not_an_object_is_refused(calls: list[str]) -> None:
+    client = await open_client(calls)
+
+    await client.send_raw_text("[1, 2]")
+
+    assert (await refused_frame(client))["code"] == "malformed_message"
+    await client.disconnect()
+
+
+async def test_a_binary_frame_is_refused(calls: list[str]) -> None:
+    client = await open_client(calls)
+
+    await client.send_bytes(b"binary")
+
+    assert (await refused_frame(client))["code"] == "malformed_message"
+    await client.disconnect()

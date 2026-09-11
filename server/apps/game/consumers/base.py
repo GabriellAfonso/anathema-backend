@@ -1,3 +1,4 @@
+import json
 from collections.abc import Mapping
 from typing import NotRequired, TypedDict
 
@@ -5,6 +6,8 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.core.cache import cache
 from django.utils import timezone
+
+from apps.game.protocol import MALFORMED_MESSAGE, UNKNOWN_MESSAGE_TYPE
 
 # Close code do gate de autenticação, no range privado 4000-4999. Os gates de
 # domínio continuam a série a partir dele (MatchConsumer usa 44xx).
@@ -151,17 +154,62 @@ class BaseConsumer(AsyncJsonWebsocketConsumer):
         >>> await self.channel_layer.group_discard("online_players", self.channel_name)
         """
 
-    async def receive_json(self, content: dict[str, object], **kwargs: object) -> None:
-        """Routes `{"type": "play_card", ...}` to `handle_play_card(payload)`."""
-        msg_type = content.get("type")
-        payload = content.get("payload")
+    async def receive(
+        self,
+        text_data: str | None = None,
+        bytes_data: bytes | None = None,
+        **kwargs: object,
+    ) -> None:
+        """Decodifica o frame, e recusa em vez de derrubar o socket.
 
-        if not msg_type:
+        O `receive` do Channels levanta com frame binário e com JSON inválido, e
+        a exceção fecha a conexão. Um cliente com bug recebe a recusa e segue
+        conectado (feature 009, FR-023).
+        """
+        if text_data is None:
+            await self.send_refusal(
+                MALFORMED_MESSAGE, "expected a text frame, got binary"
+            )
+            return
+
+        try:
+            content = json.loads(text_data)
+        except json.JSONDecodeError as error:
+            await self.send_refusal(MALFORMED_MESSAGE, f"frame is not JSON: {error}")
+            return
+
+        if not isinstance(content, dict):
+            await self.send_refusal(
+                MALFORMED_MESSAGE, f"frame is {content!r}: expected a JSON object"
+            )
+            return
+
+        await self.receive_json(content)
+
+    async def receive_json(self, content: dict[str, object], **kwargs: object) -> None:
+        """Routes `{"type": "play_card", ...}` to `handle_play_card(payload)`.
+
+        Mensagem sem `type`, ou com `type` sem handler, era ignorada em
+        silêncio, e o cliente ficava esperando resposta a uma mensagem que o
+        servidor jogou fora. Desde a feature 009 as duas recebem recusa.
+        """
+        msg_type = content.get("type")
+
+        if not isinstance(msg_type, str) or not msg_type:
+            await self.send_refusal(
+                MALFORMED_MESSAGE, f"type is {msg_type!r}: expected a non-empty string"
+            )
             return
 
         handler = getattr(self, f"handle_{msg_type}", None)
-        if handler:
-            await handler(payload)
+
+        if handler is None:
+            await self.send_refusal(
+                UNKNOWN_MESSAGE_TYPE, f"type {msg_type!r} has no handler on this socket"
+            )
+            return
+
+        await handler(content.get("payload"))
 
     async def send_event(
         self, *, type: str, payload: Mapping[str, object] | None = None
@@ -177,6 +225,16 @@ class BaseConsumer(AsyncJsonWebsocketConsumer):
                 "payload": payload or {},
             }
         )
+
+    async def send_refusal(self, code: str, message: str) -> None:
+        """Recusa uma mensagem, só para este socket, sem fechá-lo.
+
+        `code` é o texto estável que o cliente compara; `message` é para gente.
+        O catálogo está em `apps/game/protocol/refusal_codes.py`.
+
+        >>> await self.send_refusal("unknown_message_type", "type 'x' ...")
+        """
+        await self.send_error("message_refused", message, code=code)
 
     async def send_error(self, type: str, message: str, **extra: object) -> None:
         await self.send_event(

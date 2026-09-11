@@ -61,6 +61,14 @@ class WebsocketTestClient(ApplicationCommunicator):
             {"type": "websocket.receive", "text": json.dumps(content)}
         )
 
+    async def send_raw_text(self, text: str) -> None:
+        """Um frame de texto qualquer, JSON ou não -- para testar a recusa."""
+        await self.send_input({"type": "websocket.receive", "text": text})
+
+    async def send_bytes(self, data: bytes) -> None:
+        """Um frame binário, que o socket de partida não aceita."""
+        await self.send_input({"type": "websocket.receive", "bytes": data})
+
     async def receive_json_from(self, timeout: float = 1) -> dict[str, object]:
         response = await self.receive_output(timeout)
 
@@ -68,6 +76,10 @@ class WebsocketTestClient(ApplicationCommunicator):
             response["type"] == "websocket.send"
         ), f"Expected 'websocket.send', got {response['type']!r}"
         return cast(dict[str, object], json.loads(cast(str, response["text"])))
+
+    async def nothing_received(self, timeout: float = 0.1) -> bool:
+        """Se nenhum frame chegou neste socket dentro do prazo."""
+        return bool(await self.receive_nothing(timeout))
 
     async def receive_close_code(self, timeout: float = 1) -> int:
         """Close code of a socket the consumer closed after accepting it."""
