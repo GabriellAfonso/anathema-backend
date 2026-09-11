@@ -19,7 +19,6 @@ from apps.game.cards import CardCatalog, CardId, mvp_catalog
 from apps.game.engine import (
     AssignBlockerAction,
     AttackTokenAlreadyConsumedError,
-    CastSpellAction,
     DeclareAttackAction,
     EndDefenseWindowAction,
     NotTheTokenHolderError,
@@ -299,7 +298,7 @@ def test_no_action_of_the_combat_stops_in_an_automatic_phase(
     catalog: CardCatalog, source: RandomSource
 ) -> None:
     """A promessa de `submit_action` desde a feature 005, agora com o combate
-    dentro: nunca `UPKEEP`, `STACK_RESOLUTION` nem `ROUND_END`."""
+    dentro: nunca `UPKEEP` nem `ROUND_END`."""
     match = board(catalog, bank_one=(DARK_AGE,), bank_two=(SKILLET,))
     seen = []
 
@@ -354,7 +353,7 @@ def test_a_combat_that_finishes_the_match_still_clears_its_state(
     catalog: CardCatalog, source: RandomSource
 ) -> None:
     """O combate terminou -- o que interrompe um combate é um feitiço dentro da
-    janela, e esse caminho está em `test_cast_combat_spell.py`."""
+    janela, e esse caminho está em `test_spell_in_combat.py`."""
     match = board(catalog, bank_one=(MORTEM,), bank_two=())
     match.player(PLAYER_TWO).nexus = 1
 
@@ -385,15 +384,12 @@ def test_the_round_goes_on_after_the_combat(
     assert match.phase is MatchPhase.ACTION
 
 
-def test_the_stack_path_works_again_after_the_combat(
+def test_a_unit_after_the_combat_gives_the_turn_back(
     catalog: CardCatalog, source: RandomSource
 ) -> None:
-    """A exceção da janela não vazou: a §5B volta a empilhar e a devolver a
-    vez."""
-    match = board(
-        catalog, bank_one=(DARK_AGE,), bank_two=(SKILLET,), hand_two=(SUMMONED_AX,)
-    )
-    attacker = bank_card(match.player(PLAYER_ONE))
+    """A exceção da janela não vazou: depois do combate, jogar unidade volta a
+    devolver a vez."""
+    match = board(catalog, bank_one=(DARK_AGE,), bank_two=(SKILLET,), hand_two=(KHRAS,))
 
     declare(match, 0, catalog=catalog, source=source)
     resolve(match, catalog=catalog, source=source)
@@ -403,17 +399,16 @@ def test_the_stack_path_works_again_after_the_combat(
     )
     submit_action(
         match,
-        CastSpellAction(
+        PlayUnitAction(
             actor_user_id=PLAYER_TWO,
-            card_instance_id=hand_card(match.player(PLAYER_TWO), SUMMONED_AX),
-            target_card_instance_id=bank_card(match.player(PLAYER_ONE)),
+            card_instance_id=hand_card(match.player(PLAYER_TWO), KHRAS),
         ),
         catalog=catalog,
         randomness=source,
     )
 
-    assert len(match.stack) == 1
     assert match.priority_user_id == PLAYER_ONE
+    assert match.phase is MatchPhase.ACTION
 
 
 def test_a_second_attack_in_the_same_round_is_refused(
@@ -455,7 +450,7 @@ def test_the_defender_of_the_combat_cannot_declare_in_the_same_round(
 def test_the_round_closes_normally_after_the_combat(
     catalog: CardCatalog, source: RandomSource
 ) -> None:
-    """Dois passes com a pilha vazia fecham a rodada, o token troca de dono, e
+    """Dois passes seguidos fecham a rodada, o token troca de dono, e
     o Upkeep da seguinte roda dentro da mesma chamada."""
     match = board(catalog, bank_one=(DARK_AGE,), bank_two=(SKILLET,))
 

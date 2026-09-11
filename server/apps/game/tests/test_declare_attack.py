@@ -3,10 +3,10 @@ em Combate.
 
 Três metades. O caminho aceito -- e o que ele **não** faz, que é tão contrato
 quanto o que faz: nenhuma carta se move, nenhuma energia é gasta, nenhum Nexus
-muda. As sete recusas, cada uma nomeando o valor ofensor e provando por
+muda. As seis recusas, cada uma nomeando o valor ofensor e provando por
 `match_snapshot` que o estado ficou idêntico. E a cascata, que é onde esta
 feature podia dar errado sem ninguém notar: `submit_action` precisa devolver a
-partida **parada em Combate**, e não em Fim de Rodada nem em Resolução de Pilha.
+partida **parada em Combate**, e não em Fim de Rodada.
 
 O teste central é `test_a_declaration_does_not_close_the_round`: com o oponente
 tendo passado uma vez, uma declaração que esquecesse de zerar os passes deixaria
@@ -18,6 +18,7 @@ import pytest
 from apps.game.cards import CardCatalog, mvp_catalog
 from apps.game.engine import (
     AttackerNotInBankError,
+    CastSpellAction,
     AttackTokenAlreadyConsumedError,
     BankHasNoUnitsError,
     DeclareAttackAction,
@@ -27,7 +28,6 @@ from apps.game.engine import (
     NotYourPriorityError,
     PassAction,
     PhaseForbidsActionError,
-    StackIsNotEmptyError,
     submit_action,
 )
 from apps.game.match import (
@@ -36,7 +36,6 @@ from apps.game.match import (
     MatchPhase,
     PlayerState,
     STARTING_NEXUS,
-    StackEntry,
 )
 from apps.game.randomness import RandomSource
 from apps.game.tests.fake_combat_board import (
@@ -47,8 +46,11 @@ from apps.game.tests.fake_combat_board import (
     PLAYER_TWO,
     POLAROID,
     SKILLET,
+    LIFE_POTION,
+    SUMMONED_AX,
     bank_card,
     fake_combat_board,
+    hand_card,
 )
 from apps.game.tests.fake_random_source import ScriptedRandomSource
 from apps.game.tests.match_snapshot import match_snapshot
@@ -226,7 +228,7 @@ def test_a_declaration_does_not_close_the_round(
 ) -> None:
     """Com o oponente tendo passado uma vez, uma declaração que esquecesse de
     zerar os passes deixaria a saída da §5 fechar a rodada por baixo do
-    combate: dois passes consecutivos com a pilha vazia é Fim de Rodada."""
+    combate: dois passes consecutivos são Fim de Rodada."""
     submit_action(
         match, PassAction(actor_user_id=PLAYER_ONE), catalog=catalog, randomness=source
     )
@@ -239,7 +241,33 @@ def test_a_declaration_does_not_close_the_round(
     assert match.round_number == 1
 
 
-# --- As sete recusas ---------------------------------------------------------
+def test_spells_then_an_attack_in_the_same_turn(
+    catalog: CardCatalog, source: RandomSource
+) -> None:
+    """Feitiço não gasta a vez (§5B): o dono do token joga dois e ainda declara
+    ataque, e a vez só passa ao defensor na declaração."""
+    match = fake_combat_board(
+        catalog=catalog,
+        hand_one=(SUMMONED_AX, LIFE_POTION),
+        bank_one=(DARK_AGE,),
+        bank_two=(SKILLET,),
+    )
+    one, two = match.player(PLAYER_ONE), match.player(PLAYER_TWO)
+
+    for action in (
+        CastSpellAction(PLAYER_ONE, hand_card(one, SUMMONED_AX), bank_card(two)),
+        CastSpellAction(PLAYER_ONE, hand_card(one, LIFE_POTION)),
+    ):
+        submit_action(match, action, catalog=catalog, randomness=source)
+        assert match.priority_user_id == PLAYER_ONE
+
+    declare(match, 0, catalog=catalog, source=source)
+
+    assert match.phase is MatchPhase.COMBAT
+    assert match.priority_user_id == PLAYER_TWO
+
+
+# --- As seis recusas ---------------------------------------------------------
 
 
 def test_a_player_without_the_token_is_refused_naming_the_holder(
@@ -265,22 +293,6 @@ def test_a_consumed_token_is_refused_naming_the_round(
         declare(match, 0, catalog=catalog, source=source)
 
     assert refusal.value.round_number == 1
-    assert match_snapshot(match) == before
-
-
-def test_a_full_stack_is_refused_naming_the_size(
-    match: Match, catalog: CardCatalog, source: RandomSource
-) -> None:
-    one = match.player(PLAYER_ONE)
-    match.stack = [
-        StackEntry(card=one.bank[0].card, caster_user_id=PLAYER_ONE),
-    ]
-    before = match_snapshot(match)
-
-    with pytest.raises(StackIsNotEmptyError) as refusal:
-        declare(match, 0, catalog=catalog, source=source)
-
-    assert refusal.value.stack_size == 1
     assert match_snapshot(match) == before
 
 

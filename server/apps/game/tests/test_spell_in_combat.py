@@ -1,18 +1,20 @@
-"""A §7.2: o feitiço do defensor resolve na hora, sem pilha e sem resposta.
+"""A §7.2: o feitiço do defensor dentro da janela, e o que ele muda no combate.
 
-O teste que carrega o arquivo é `test_both_paths_give_the_same_state`: ele
-aplica cada um dos cinco efeitos pelos dois caminhos — a pilha da §6 e o combate
-da §7.2 — a partir do mesmo estado inicial, e compara os dois `match_snapshot`
-finais **campo a campo**. É essa comparação que segura a promessa de que existe
-um aplicador só, e foi ela que apontou a ordem do cemitério: uma unidade morta
-pelo efeito precisa entrar antes da carta do feitiço nos dois caminhos.
+É a mesma ação da Fase de Ação — `CastSpellAction` —, e o que ela faz em
+qualquer fase está em `test_cast_spell.py`. Aqui fica o que só existe com o
+combate aberto: a vez que continua com o defensor enquanto ele bloqueia e
+conjura, o bloqueador que um feitiço salva, o atacante que um feitiço mata antes
+do dano, e a partida que acaba dentro da janela.
 
-O segundo é `test_a_defender_who_kills_themselves_freezes_the_combat`: um
-SACRIFICIAL FIRE que derrota o próprio defensor encerra a partida **dentro** da
-janela, e o dano do combate nunca resolve.
+Três testes daqui usam cartas cuja regra a segunda correção da nota
+(2026-09-11, §14) mudou, e foram trazidos da feature 007 **sem mudança de
+afirmação**: o bloqueador imune usa MAGIC BARRIER, e os dois da partida que
+acaba na janela usam SACRIFICIAL FIRE jogado pelo defensor. A feature da §14 os
+reescreve. O `return` que eles cobrem em `combat_cleanup._leave_combat` continua
+existindo, e a desistência da §10 vai precisar dele.
 
-Custos do MVP: SOMEONE'S SHIELD 2, MAGIC BARRIER 3, SACRIFICIAL FIRE 3,
-LIFE POTION 4, SUMMONED AX 5.
+Custos do MVP: SOMEONE'S SHIELD 2, MAGIC BARRIER 3, LIFE POTION 4,
+SUMMONED AX 5.
 """
 
 import pytest
@@ -20,18 +22,9 @@ import pytest
 from apps.game.cards import CardCatalog, CardId, mvp_catalog
 from apps.game.engine import (
     AssignBlockerAction,
-    CardIsNotASpellError,
-    CardNotInHandError,
-    CastCombatSpellAction,
     CastSpellAction,
-    DeclareAttackAction,
     EndDefenseWindowAction,
     MatchIsOverError,
-    NotEnoughEnergyError,
-    NotYourPriorityError,
-    PassAction,
-    SpellTargetNotOnBattlefieldError,
-    WrongSpellTargetSideError,
     submit_action,
 )
 from apps.game.match import (
@@ -63,9 +56,9 @@ from apps.game.tests.fake_combat_board import (
     in_graveyard,
 )
 from apps.game.tests.fake_random_source import ScriptedRandomSource
-from apps.game.tests.match_snapshot import match_snapshot
 
 FIRE_NEXUS_COST = 8
+AX_COST = 5
 
 
 @pytest.fixture
@@ -82,17 +75,12 @@ def board(
     catalog: CardCatalog,
     *,
     hand_two: tuple[CardId, ...] = (SUMMONED_AX,),
-    hand_one: tuple[CardId, ...] = (),
     bank_one: tuple[CardId, ...] = (DARK_AGE,),
     bank_two: tuple[CardId, ...] = (SKILLET,),
 ) -> Match:
     """Combate já declarado com todo o banco do atacante."""
     match = fake_combat_board(
-        catalog=catalog,
-        hand_one=hand_one,
-        hand_two=hand_two,
-        bank_one=bank_one,
-        bank_two=bank_two,
+        catalog=catalog, hand_two=hand_two, bank_one=bank_one, bank_two=bank_two
     )
 
     declare_combat(match, *range(len(bank_one)))
@@ -107,13 +95,13 @@ def cast(
     catalog: CardCatalog,
     source: RandomSource,
     target: CardInstanceId | None = None,
-    actor_user_id: int = PLAYER_TWO,
 ) -> None:
+    """O defensor joga a carta, pela mesma ação de qualquer outra fase."""
     submit_action(
         match,
-        CastCombatSpellAction(
-            actor_user_id=actor_user_id,
-            card_instance_id=hand_card(match.player(actor_user_id), card_id),
+        CastSpellAction(
+            actor_user_id=PLAYER_TWO,
+            card_instance_id=hand_card(match.player(PLAYER_TWO), card_id),
             target_card_instance_id=target,
         ),
         catalog=catalog,
@@ -130,7 +118,7 @@ def resolve(match: Match, *, catalog: CardCatalog, source: RandomSource) -> None
     )
 
 
-# --- Resolve na hora ---------------------------------------------------------
+# --- Resolve na hora, e a vez fica ------------------------------------------
 
 
 def test_the_effect_happens_immediately(
@@ -142,21 +130,6 @@ def test_the_effect_happens_immediately(
     cast(match, SUMMONED_AX, catalog=catalog, source=source, target=attacker)
 
     assert match.player(PLAYER_ONE).bank[0].damage_taken == 3
-
-
-def test_the_stack_stays_empty(catalog: CardCatalog, source: RandomSource) -> None:
-    """O combate não usa a pilha, e o atacante não tem o que responder."""
-    match = board(catalog)
-
-    cast(
-        match,
-        SUMMONED_AX,
-        catalog=catalog,
-        source=source,
-        target=bank_card(match.player(PLAYER_ONE)),
-    )
-
-    assert match.stack == []
 
 
 def test_the_card_goes_straight_to_the_graveyard(
@@ -220,217 +193,7 @@ def test_the_energy_is_spent(catalog: CardCatalog, source: RandomSource) -> None
         target=bank_card(match.player(PLAYER_ONE)),
     )
 
-    assert match.player(PLAYER_TWO).energy_current == before - 5
-
-
-# --- Os dois caminhos, mesmo resultado ---------------------------------------
-
-
-def test_both_paths_give_the_same_state(
-    catalog: CardCatalog, source: RandomSource
-) -> None:
-    """Cada um dos cinco efeitos, pela pilha e pelo combate, a partir do mesmo
-    estado inicial — e os dois estados finais iguais campo a campo.
-
-    O que diverge se a ordem do cemitério estiver errada: SUMMONED AX matando o
-    alvo põe a unidade morta e a carta do feitiço no mesmo cemitério, e a ordem
-    entre as duas é observável.
-    """
-    for card_id, needs_ally, needs_enemy in (
-        (SOMEONES_SHIELD, True, False),
-        (MAGIC_BARRIER, True, False),
-        (SACRIFICIAL_FIRE, False, False),
-        (LIFE_POTION, False, False),
-        (SUMMONED_AX, False, True),
-    ):
-        by_stack = _apply_by_stack(catalog, source, card_id, needs_ally, needs_enemy)
-        by_combat = _apply_by_combat(catalog, source, card_id, needs_ally, needs_enemy)
-
-        assert _comparable(by_stack) == _comparable(by_combat), card_id
-
-
-def _spell_board(catalog: CardCatalog, card_id: CardId) -> Match:
-    """Mesmo estado inicial dos dois lados: o defensor tem a carta, e os dois
-    têm uma unidade frágil no banco."""
-    return fake_combat_board(
-        catalog=catalog,
-        hand_two=(card_id,),
-        bank_one=(MORTEM,),
-        bank_two=(MORTEM,),
-    )
-
-
-def _target_for(
-    match: Match, needs_ally: bool, needs_enemy: bool
-) -> CardInstanceId | None:
-    if needs_ally:
-        return bank_card(match.player(PLAYER_TWO))
-
-    if needs_enemy:
-        return bank_card(match.player(PLAYER_ONE))
-
-    return None
-
-
-def _apply_by_stack(
-    catalog: CardCatalog,
-    source: RandomSource,
-    card_id: CardId,
-    needs_ally: bool,
-    needs_enemy: bool,
-) -> Match:
-    """A §5B: lança, os dois passam, a pilha resolve."""
-    match = _spell_board(catalog, card_id)
-    match.priority_user_id = PLAYER_TWO
-
-    submit_action(
-        match,
-        CastSpellAction(
-            actor_user_id=PLAYER_TWO,
-            card_instance_id=hand_card(match.player(PLAYER_TWO), card_id),
-            target_card_instance_id=_target_for(match, needs_ally, needs_enemy),
-        ),
-        catalog=catalog,
-        randomness=source,
-    )
-    submit_action(
-        match, PassAction(actor_user_id=PLAYER_ONE), catalog=catalog, randomness=source
-    )
-    submit_action(
-        match, PassAction(actor_user_id=PLAYER_TWO), catalog=catalog, randomness=source
-    )
-
-    return match
-
-
-def _apply_by_combat(
-    catalog: CardCatalog,
-    source: RandomSource,
-    card_id: CardId,
-    needs_ally: bool,
-    needs_enemy: bool,
-) -> Match:
-    """A §7.2: lança dentro da janela, e resolve na hora."""
-    match = _spell_board(catalog, card_id)
-    declare_combat(match, 0)
-
-    cast(
-        match,
-        card_id,
-        catalog=catalog,
-        source=source,
-        target=_target_for(match, needs_ally, needs_enemy),
-    )
-
-    return match
-
-
-def _comparable(match: Match) -> object:
-    """As zonas, os Nexus e os bancos. Fase, prioridade, token e combate ficam
-    de fora: os dois caminhos chegam de estados de rodada diferentes, e o que
-    está sob teste é o **efeito**."""
-    document = match_snapshot(match)
-
-    return document["players"]
-
-
-# --- As recusas --------------------------------------------------------------
-
-
-def test_not_enough_energy_is_refused_naming_the_cost(
-    catalog: CardCatalog, source: RandomSource
-) -> None:
-    match = board(catalog)
-    match.player(PLAYER_TWO).energy_current = 1
-    before = match_snapshot(match)
-
-    with pytest.raises(NotEnoughEnergyError) as refusal:
-        cast(
-            match,
-            SUMMONED_AX,
-            catalog=catalog,
-            source=source,
-            target=bank_card(match.player(PLAYER_ONE)),
-        )
-
-    assert (refusal.value.cost, refusal.value.available) == (5, 1)
-    assert match_snapshot(match) == before
-
-
-def test_a_target_off_the_battlefield_is_refused(
-    catalog: CardCatalog, source: RandomSource
-) -> None:
-    """Recusa, não fizzle: aqui não existe intervalo entre validar e aplicar."""
-    match = board(catalog)
-    before = match_snapshot(match)
-
-    with pytest.raises(SpellTargetNotOnBattlefieldError):
-        cast(
-            match,
-            SUMMONED_AX,
-            catalog=catalog,
-            source=source,
-            target=CardInstanceId(9999),
-        )
-
-    assert match_snapshot(match) == before
-
-
-def test_a_target_on_the_wrong_side_is_refused(
-    catalog: CardCatalog, source: RandomSource
-) -> None:
-    match = board(catalog, hand_two=(SOMEONES_SHIELD,))
-    before = match_snapshot(match)
-
-    with pytest.raises(WrongSpellTargetSideError):
-        cast(
-            match,
-            SOMEONES_SHIELD,
-            catalog=catalog,
-            source=source,
-            target=bank_card(match.player(PLAYER_ONE)),
-        )
-
-    assert match_snapshot(match) == before
-
-
-def test_a_card_that_is_not_in_hand_is_refused(
-    catalog: CardCatalog, source: RandomSource
-) -> None:
-    match = board(catalog)
-
-    with pytest.raises(CardNotInHandError):
-        submit_action(
-            match,
-            CastCombatSpellAction(
-                actor_user_id=PLAYER_TWO, card_instance_id=CardInstanceId(9999)
-            ),
-            catalog=catalog,
-            randomness=source,
-        )
-
-
-def test_a_unit_card_is_refused(catalog: CardCatalog, source: RandomSource) -> None:
-    match = board(catalog, hand_two=(KHRAS,))
-
-    with pytest.raises(CardIsNotASpellError):
-        cast(match, KHRAS, catalog=catalog, source=source)
-
-
-def test_the_attacker_cannot_cast_in_the_window(
-    catalog: CardCatalog, source: RandomSource
-) -> None:
-    match = board(catalog, hand_one=(SUMMONED_AX,))
-
-    with pytest.raises(NotYourPriorityError):
-        cast(
-            match,
-            SUMMONED_AX,
-            catalog=catalog,
-            source=source,
-            target=bank_card(match.player(PLAYER_TWO)),
-            actor_user_id=PLAYER_ONE,
-        )
+    assert match.player(PLAYER_TWO).energy_current == before - AX_COST
 
 
 # --- O que o feitiço muda no dano --------------------------------------------
@@ -461,6 +224,9 @@ def test_a_buffed_blocker_survives_the_trade(
 def test_an_immune_blocker_takes_nothing_and_the_attacker_takes_its_share(
     catalog: CardCatalog, source: RandomSource
 ) -> None:
+    """MAGIC BARRIER como a feature 006 a entregou. A §14 muda a regra dela
+    (anula o próximo dano, não expira), e a feature que a implementa reescreve
+    este teste."""
     match = board(
         catalog,
         hand_two=(MAGIC_BARRIER,),
@@ -528,6 +294,9 @@ def test_a_defender_who_kills_themselves_freezes_the_combat(
     """SACRIFICIAL FIRE cobra 8 de Nexus do lançador. Com 8 ou menos, o defensor
     se derrota **dentro** da janela: nenhuma ação seguinte é aceita, o dano do
     combate nunca resolve, e o estado de combate fica congelado onde parou.
+
+    A §14 proíbe o FIRE ao defensor e o faz parar em Nexus 1. Quando ela
+    entrar, este cenário é alcançado pela desistência da §10.
     """
     match = board(
         catalog, hand_two=(SACRIFICIAL_FIRE,), bank_one=(MORTEM,), bank_two=(KHRAS,)
@@ -551,7 +320,8 @@ def test_a_defender_who_kills_themselves_freezes_the_combat(
 def test_the_frozen_combat_still_survives_the_round_trip(
     catalog: CardCatalog, source: RandomSource
 ) -> None:
-    """O estado congelado precisa continuar íntegro e serializável."""
+    """O estado congelado precisa continuar íntegro e serializável. Mesma
+    ressalva da §14 do teste acima."""
     match = board(
         catalog, hand_two=(SACRIFICIAL_FIRE,), bank_one=(MORTEM,), bank_two=(KHRAS,)
     )

@@ -1,8 +1,8 @@
-"""Todo estado que a pilha de feitiços produz sobrevive à ida e à volta.
+"""Todo estado que o feitiço produz sobrevive à ida e à volta.
 
-A feature 002 garante o round-trip do estado que ela modelou; esta feature é a
-primeira a **preencher** a pilha, os modificadores, o dano e os cemitérios, e a
-primeira a acrescentar um campo desde então -- o desfecho da §10.
+A feature 002 garante o round-trip do estado que ela modelou; a feature 006 foi
+a primeira a **preencher** os modificadores, o dano e os cemitérios, e a primeira
+a acrescentar um campo desde então -- o desfecho da §10.
 
 Passa por `to_match_document` -> `json` -> `match_from_document`, como
 `test_match_serialization.py` faz, e não toca no Redis: o formato é o que está
@@ -150,10 +150,16 @@ def test_a_finished_document_is_stable_across_the_round_trip() -> None:
 
 
 def played_out_match() -> Match:
-    """Uma partida que passou pela §5B: pilha cheia dos dois jogadores.
+    """Uma partida que passou pela §5B dos dois lados, com os feitiços já
+    resolvidos.
 
     Sai do motor de verdade, e não montada à mão: o que precisa sobreviver é o
     estado que o lançamento **produz**, não um que se pareça com ele.
+
+    SACRIFICIAL FIRE é jogado na Fase de Ação porque é o único feitiço do MVP
+    que cria `AttackModifier`. A §14 da nota, corrigida em 2026-09-11, o
+    restringe à declaração de ataque; a feature que a implementa muda este
+    lançamento de lugar.
     """
     catalog = mvp_catalog()
     source = ScriptedRandomSource()
@@ -164,51 +170,18 @@ def played_out_match() -> Match:
     )
     one, two = match.players
 
-    submit_action(
-        match,
+    for action in (
         CastSpellAction(one.user_id, hand_card(one, SOMEONES_SHIELD), bank_card(one)),
-        catalog=catalog,
-        randomness=source,
-    )
-    submit_action(
-        match,
-        CastSpellAction(two.user_id, hand_card(two, MAGIC_BARRIER), bank_card(two)),
-        catalog=catalog,
-        randomness=source,
-    )
-    submit_action(
-        match,
         CastSpellAction(one.user_id, hand_card(one, SACRIFICIAL_FIRE)),
-        catalog=catalog,
-        randomness=source,
-    )
+        PassAction(one.user_id),
+        CastSpellAction(two.user_id, hand_card(two, MAGIC_BARRIER), bank_card(two)),
+    ):
+        submit_action(match, action, catalog=catalog, randomness=source)
 
     return match
 
 
-def test_a_full_stack_survives_the_round_trip() -> None:
-    match = played_out_match()
-
-    rebuilt = round_trip(match)
-
-    assert [
-        (
-            entry.card.card_instance_id,
-            entry.caster_user_id,
-            entry.target_card_instance_id,
-        )
-        for entry in rebuilt.stack
-    ] == [
-        (
-            entry.card.card_instance_id,
-            entry.caster_user_id,
-            entry.target_card_instance_id,
-        )
-        for entry in match.stack
-    ]
-
-
-def test_a_stacked_match_is_stable_across_the_round_trip() -> None:
+def test_a_match_after_spells_is_stable_across_the_round_trip() -> None:
     """A prova mais forte: o documento inteiro, campo a campo."""
     match = played_out_match()
 
@@ -216,11 +189,8 @@ def test_a_stacked_match_is_stable_across_the_round_trip() -> None:
 
 
 def test_the_three_modifier_kinds_survive_the_round_trip() -> None:
-    """Esta feature é a primeira a criar os três, e os três voltam."""
-    catalog = mvp_catalog()
-    source = ScriptedRandomSource()
+    """A feature 006 foi a primeira a criar os três, e os três voltam."""
     match = played_out_match()
-    pass_until_priority_returns(match, catalog, source)
     kinds = {
         type(modifier)
         for player in match.players
@@ -245,7 +215,6 @@ def test_accumulated_damage_and_graveyards_survive_the_round_trip() -> None:
         catalog=catalog,
         randomness=source,
     )
-    pass_until_priority_returns(match, catalog, source)
 
     rebuilt = round_trip(match)
 
@@ -259,7 +228,12 @@ def test_accumulated_damage_and_graveyards_survive_the_round_trip() -> None:
 
 
 def test_the_round_end_sweeps_the_immunity_this_feature_creates() -> None:
-    """Primeiro caso real da varredura que a feature 005 escreveu sem casos."""
+    """Primeiro caso real da varredura que a feature 005 escreveu sem casos.
+
+    MAGIC BARRIER como a feature 006 a entregou. A §14 da nota, corrigida em
+    2026-09-11, faz a barreira não expirar no fim da rodada; a feature que a
+    implementa reescreve este teste.
+    """
     catalog = mvp_catalog()
     source = ScriptedRandomSource()
     match = fake_spell_board(catalog=catalog, hand_one=(MAGIC_BARRIER,))
@@ -271,7 +245,6 @@ def test_the_round_end_sweeps_the_immunity_this_feature_creates() -> None:
         catalog=catalog,
         randomness=source,
     )
-    pass_until_priority_returns(match, catalog, source)
     assert unit_has_damage_immunity(unit) is True
 
     pass_until_priority_returns(match, catalog, source)
@@ -295,14 +268,13 @@ def test_the_round_end_keeps_the_permanent_modifiers() -> None:
         catalog=catalog,
         randomness=source,
     )
-    match.priority_user_id = one.user_id
     submit_action(
         match,
         CastSpellAction(one.user_id, hand_card(one, SACRIFICIAL_FIRE)),
         catalog=catalog,
         randomness=source,
     )
-    pass_until_priority_returns(match, catalog, source, times=4)
+    pass_until_priority_returns(match, catalog, source)
 
     assert {type(modifier) for modifier in unit.modifiers} == {
         HealthModifier,
@@ -323,7 +295,7 @@ def test_accumulated_damage_is_not_swept_by_the_round_end() -> None:
         catalog=catalog,
         randomness=source,
     )
-    pass_until_priority_returns(match, catalog, source, times=4)
+    pass_until_priority_returns(match, catalog, source)
 
     assert unit.damage_taken == 3
     assert match.round_number == 2
@@ -335,7 +307,7 @@ def test_accumulated_damage_is_not_swept_by_the_round_end() -> None:
 
 
 def resolved_shield(catalog: CardCatalog) -> Match:
-    """Lança e resolve SOMEONE'S SHIELD com o catálogo dado."""
+    """Joga SOMEONE'S SHIELD com o catálogo dado; resolve na hora."""
     source = ScriptedRandomSource()
     match = fake_spell_board(catalog=catalog, hand_one=(SOMEONES_SHIELD,))
     one = match.players[0]
@@ -346,7 +318,6 @@ def resolved_shield(catalog: CardCatalog) -> Match:
         catalog=catalog,
         randomness=source,
     )
-    pass_until_priority_returns(match, catalog, source)
 
     return match
 

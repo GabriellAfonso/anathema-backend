@@ -8,8 +8,9 @@ ação do defensor já seria recusada, e a janela livre da §7.2 viraria uma aç
 só — o oposto da regra.
 
 O segundo mais importante é `test_the_action_phase_still_alternates`: a exceção
-da janela não pode vazar. Ela é propriedade da ação, e as quatro ações da §5
-declaram que devolvem a vez.
+da janela não pode vazar. Ela é propriedade da ação, e as três ações da §5 que
+gastam a vez declaram que a devolvem — o feitiço, que não gasta, declara que
+fica, e isso é afirmado em `test_cast_spell.py`.
 """
 
 import pytest
@@ -289,10 +290,9 @@ def _still_the_defenders_turn(match: Match) -> None:
 
 
 def test_every_action_phase_arm_gives_the_turn_back() -> None:
-    """A exceção da §7.2 é propriedade da ação, e as quatro da §5 declaram que
-    devolvem a vez. É o que impede a exceção de vazar."""
+    """Ficar com a vez é propriedade da ação, e as três ações da §5 que gastam
+    a vez declaram que a devolvem. É o que impede a exceção de vazar."""
     assert not PlayUnitAction.keeps_priority
-    assert not CastSpellAction.keeps_priority
     assert not PassAction.keeps_priority
     assert not DeclareAttackAction.keeps_priority
 
@@ -479,11 +479,14 @@ def test_the_attacker_cannot_pass_play_or_cast_during_the_combat(
 def test_the_defender_cannot_use_the_action_phase_actions(
     match: Match, catalog: CardCatalog, source: RandomSource
 ) -> None:
-    """Recusa de **fase**: `{ACTION}` não contém `COMBAT`."""
+    """Recusa de **fase**: `{ACTION}` não contém `COMBAT`.
+
+    Jogar feitiço não está aqui: desde a feature 008 ele é legal nas duas
+    fases, e as recusas dele no combate estão em `test_cast_spell_refusals.py`.
+    """
     forbidden = (
         PassAction(actor_user_id=PLAYER_TWO),
         PlayUnitAction(actor_user_id=PLAYER_TWO, card_instance_id=CardInstanceId(1)),
-        CastSpellAction(actor_user_id=PLAYER_TWO, card_instance_id=CardInstanceId(1)),
     )
 
     for action in forbidden:

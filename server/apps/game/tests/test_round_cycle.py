@@ -7,21 +7,16 @@ implementação que execute um passo por chamada e devolva a partida em
 recarrega, o Fim de Rodada varre -- e trava na primeira partida real, porque
 ninguém dá o empurrão seguinte.
 
-O par `test_the_stack_branch_of_the_exit_is_wired` e
-`test_the_stack_stays_empty_across_ten_rounds` guarda a costura da pilha. Na
-feature 005 o primeiro afirmava que a saída da §5 parava em `STACK_RESOLUTION`,
-porque nada sabia esvaziá-la; desde a 006 ele afirma o outro lado da mesma
-costura -- a cascata atravessa a fase e devolve a partida à Fase de Ação, na
-mesma rodada. O segundo continua igual: um jogo só de passes nunca empilha nada.
-
-A regra que os dois guardam é a que não mudou: a saída da §5 continua escrita
-como estava, e foi a fase que ganhou corpo.
+`test_two_passes_after_a_spell_close_the_round` guarda a saída da §5 desde a
+feature 008: com o feitiço resolvendo na hora, dois passes seguidos fecham a
+rodada sempre, e não existe mais nada pendente para resolver no meio.
 """
 
 import pytest
 
-from apps.game.cards import CardId, EffectDuration, Unit
+from apps.game.cards import CardId, EffectDuration, Unit, mvp_catalog
 from apps.game.engine import (
+    CastSpellAction,
     MatchNotAwaitingUpkeepError,
     PassAction,
     begin_round_cycle,
@@ -33,7 +28,6 @@ from apps.game.match import (
     BankUnit,
     Match,
     MatchPhase,
-    StackEntry,
     match_from_document,
     to_match_document,
 )
@@ -46,6 +40,11 @@ from apps.game.tests.fake_match_state import (
     fake_new_match,
 )
 from apps.game.tests.fake_random_source import ScriptedRandomSource
+from apps.game.tests.fake_spell_board import (
+    LIFE_POTION,
+    fake_spell_board,
+    hand_card,
+)
 from apps.game.tests.fake_setup import (
     fake_match_in_action_phase,
     fake_match_ready_for_upkeep,
@@ -273,46 +272,27 @@ def test_nothing_reaches_the_graveyard_across_ten_rounds() -> None:
     assert [player.graveyard for player in match.players] == [[], []]
 
 
-# --- A costura da pilha ------------------------------------------------------
+# --- A saída da §5 depois de um feitiço --------------------------------------
 
 
-def test_the_stack_stays_empty_across_ten_rounds() -> None:
-    """Nada nesta feature empilha, e é isso que torna a costura inalcançável."""
-    match = match_in_action_phase()
+def test_two_passes_after_a_spell_close_the_round() -> None:
+    """O feitiço resolve na hora e zera os passes; os dois passes seguintes
+    fecham a rodada, com o Upkeep da seguinte já executado."""
+    catalog = mvp_catalog()
+    randomness = source()
+    match = fake_spell_board(catalog=catalog, hand_one=(LIFE_POTION,))
+    one, two = match.players
 
-    for _ in range(20):
-        act_pass(match)
-        assert match.stack == []
+    for action in (
+        CastSpellAction(one.user_id, hand_card(one, LIFE_POTION)),
+        PassAction(one.user_id),
+        PassAction(two.user_id),
+    ):
+        submit_action(match, action, catalog=catalog, randomness=randomness)
 
-
-def test_the_stack_branch_of_the_exit_is_wired() -> None:
-    """Com um feitiço posto à mão, dois passes atravessam a Resolução de Pilha.
-
-    A saída da §5 continua escrita como a feature 005 a escreveu; o que mudou é
-    que `STACK_RESOLUTION` ganhou corpo na 006 e entrou nas fases automáticas.
-    O chamador nunca observa a fase, e a rodada não fecha: os dois passes foram
-    consumidos pela resolução.
-    """
-    match = match_in_action_phase()
-    match.players[1].bank = [
-        BankUnit(card=card) for card in fake_cards(match, [CHEAP_UNIT.card_id])
-    ]
-    pending = fake_cards(match, [SAMPLE_SPELL.card_id])[0]
-    match.stack = [
-        StackEntry(
-            card=pending,
-            caster_user_id=PLAYER_ONE,
-            target_card_instance_id=match.players[1].bank[0].card.card_instance_id,
-        )
-    ]
-
-    act_pass(match)
-    act_pass(match)
-
-    assert match.phase is MatchPhase.ACTION
-    assert match.stack == []
+    assert (match.round_number, match.phase) == (2, MatchPhase.ACTION)
     assert match.consecutive_passes == 0
-    assert match.round_number == 1
+    assert match.priority_user_id == match.token_holder_user_id == two.user_id
 
 
 # --- Round-trip pelo Redis ---------------------------------------------------
