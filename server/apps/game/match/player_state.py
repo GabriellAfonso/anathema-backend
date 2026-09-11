@@ -35,8 +35,9 @@ class PlayerState:
     bank: list[BankUnit] = field(default_factory=list)
     graveyard: list[MatchCard] = field(default_factory=list)
     # Começa em 0 e sobe no primeiro Upkeep, então a rodada 1 tem 1 de energia
-    # (§4).
-    energy_max: int = 0
+    # (§4). Uma energia só: ela acumula de rodada em rodada até o teto, e a
+    # máxima que existia até a correção da nota de 2026-09-11 deixou de ter o
+    # que guardar.
     energy_current: int = 0
     # O mulligan da §3 é uma vez por jogador por partida. Este booleano é a
     # única marca dele: "de quem o setup ainda espera" é derivado daqui pelo

@@ -83,7 +83,6 @@ def test_each_player_starts_with_the_opening_values(match: Match) -> None:
     """Nexus 20 e energia zerada: subir para 1 é do primeiro Upkeep (§4)."""
     for player in match.players:
         assert player.nexus == 20
-        assert player.energy_max == 0
         assert player.energy_current == 0
 
 
@@ -252,7 +251,6 @@ def test_the_energy_is_still_zero_after_the_setup(match: Match) -> None:
     take_both_mulligans(match)
 
     for player in match.players:
-        assert player.energy_max == 0
         assert player.energy_current == 0
 
 

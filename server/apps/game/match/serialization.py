@@ -94,7 +94,6 @@ def to_player_document(player: PlayerState) -> PlayerDocument:
         "hand": [to_card_document(card) for card in player.hand],
         "bank": [to_bank_unit_document(unit) for unit in player.bank],
         "graveyard": [to_card_document(card) for card in player.graveyard],
-        "energy_max": player.energy_max,
         "energy_current": player.energy_current,
         "mulligan_taken": player.mulligan_taken,
     }
@@ -108,7 +107,6 @@ def player_from_document(document: PlayerDocument) -> PlayerState:
         hand=[card_from_document(card) for card in document["hand"]],
         bank=[bank_unit_from_document(unit) for unit in document["bank"]],
         graveyard=[card_from_document(card) for card in document["graveyard"]],
-        energy_max=document["energy_max"],
         energy_current=document["energy_current"],
         mulligan_taken=document["mulligan_taken"],
     )

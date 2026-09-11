@@ -208,12 +208,10 @@ def test_the_round_end_touches_neither_nexus_nor_the_card_zones() -> None:
 def test_the_round_end_does_not_refill_energy() -> None:
     """Recarregar é da §4. Encadear as duas por dentro faria a §8 dona da §4."""
     match = match_at_round_end()
-    match.players[0].energy_max = 3
     match.players[0].energy_current = 1
 
     end_round(match)
 
-    assert match.players[0].energy_max == 3
     assert match.players[0].energy_current == 1
 
 

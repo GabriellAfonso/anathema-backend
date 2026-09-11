@@ -114,7 +114,6 @@ def _fill_side(
         BankUnit(card=MatchCard(match.mint_card_instance_id(), card_id))
         for card_id in bank
     ]
-    player.energy_max = PLENTY_OF_ENERGY
     player.energy_current = PLENTY_OF_ENERGY
 
 

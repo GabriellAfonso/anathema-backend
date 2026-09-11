@@ -66,7 +66,6 @@ def match_with_hand(
 
     actor = match.players[0]
     actor.hand = fake_cards(match, hand_card_ids)
-    actor.energy_max = energy
     actor.energy_current = energy
     actor.bank = [BankUnit(card=card) for card in fake_cards(match, [1] * bank_size)]
 

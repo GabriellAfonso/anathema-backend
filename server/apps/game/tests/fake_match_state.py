@@ -100,7 +100,6 @@ def _fill_first_player(match: Match) -> None:
     _wound_second_unit(player.bank[1])
 
     player.nexus = 18
-    player.energy_max = 3
     player.energy_current = 1
 
 
@@ -127,7 +126,6 @@ def _fill_second_player(match: Match) -> None:
     player.graveyard = fake_cards(match, [1001, 1002])
 
     player.nexus = 20
-    player.energy_max = 3
     player.energy_current = 3
 
 

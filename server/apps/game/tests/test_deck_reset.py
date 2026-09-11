@@ -114,14 +114,13 @@ def test_the_nexus_and_the_energies_are_not_touched(
     match: Match, player: PlayerState
 ) -> None:
     player.nexus = 13
-    player.energy_max = 5
     player.energy_current = 2
 
     reset_deck_from_graveyard(
         player, randomness=ScriptedRandomSource(), roll=match.mint_roll()
     )
 
-    assert (player.nexus, player.energy_max, player.energy_current) == (13, 5, 2)
+    assert (player.nexus, player.energy_current) == (13, 2)
 
 
 def test_the_order_is_the_one_the_source_dictated(

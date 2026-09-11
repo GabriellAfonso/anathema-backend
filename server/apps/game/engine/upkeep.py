@@ -1,9 +1,9 @@
 """O Upkeep da §4: a fase automática que reabastece a partida a cada volta.
 
 Roda no início de toda rodada, inclusive a primeira, e não aceita input de
-jogador nenhum. Para os dois jogadores: a energia máxima sobe 1 até o teto de
-10, a atual passa a ser a máxima -- recarga total, o que sobrou da rodada
-anterior é perdido --, e cada um compra 1 carta pela regra da §9.
+jogador nenhum. Para os dois jogadores: a energia soma o ganho da rodada -- a
+rodada N dá N -- ao que sobrou, até o teto de 10, e cada um compra 1 carta pela
+regra da §9.
 
 A ordem em que os dois são resolvidos é a do par, e é garantia, não acaso. O que
 a §4 promete é **independência**: nenhum passo do Upkeep de um jogador lê o
@@ -26,11 +26,10 @@ from apps.game.randomness import RandomSource
 
 from .card_draw import draw_card
 
-# Fluxo de Partida §12. Moram aqui, e não em `player_state.py`, porque aplicá-los
-# é regra -- e aquele arquivo diz isso de si mesmo. `energy_max` começa em 0, e é
-# o primeiro Upkeep que faz a rodada 1 ter 1 de energia.
+# Fluxo de Partida §12. Mora aqui, e não em `player_state.py`, porque aplicá-lo
+# é regra -- e aquele arquivo diz isso de si mesmo. A energia começa em 0, e é o
+# primeiro Upkeep que faz a rodada 1 ter 1.
 MAX_ENERGY = 10
-ENERGY_PER_ROUND = 1
 
 
 def run_upkeep(match: Match, *, randomness: RandomSource) -> None:
@@ -45,20 +44,26 @@ def run_upkeep(match: Match, *, randomness: RandomSource) -> None:
     1
     """
     for player in match.players:
-        _refill_energy(player)
+        _gain_energy(player, match.round_number)
         draw_card(match, player.user_id, randomness=randomness)
 
     _open_action_phase(match)
 
 
-def _refill_energy(player: PlayerState) -> None:
-    """Sobe a máxima com teto, e recarrega a atual até ela.
+def _gain_energy(player: PlayerState, round_number: int) -> None:
+    """Soma o ganho da rodada ao que sobrou, com teto (§4).
 
-    A atual é atribuída, nunca somada: energia não acumula (§4), e somar deixaria
-    a rodada 11 de um jogador econômico com mais de 10.
+    Fluxo de Partida, corrigido em 2026-09-11: energia acumula. Até então a
+    rodada recarregava até uma máxima que subia 1 por rodada, e o que sobrava se
+    perdia -- por isso existia um campo de máxima, que deixou de ter o que
+    guardar. Quem gasta tudo começa cada rodada com 1, 2, 3...; quem guarda
+    tudo, com 1, 3, 6 e 10.
+
+    >>> _gain_energy(player, 2)  # sobrou 1 da rodada 1
+    >>> player.energy_current
+    3
     """
-    player.energy_max = min(player.energy_max + ENERGY_PER_ROUND, MAX_ENERGY)
-    player.energy_current = player.energy_max
+    player.energy_current = min(player.energy_current + round_number, MAX_ENERGY)
 
 
 def _open_action_phase(match: Match) -> None:

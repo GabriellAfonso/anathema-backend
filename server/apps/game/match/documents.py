@@ -98,7 +98,6 @@ class PlayerDocument(TypedDict):
     hand: list[CardDocument]
     bank: list[BankUnitDocument]
     graveyard: list[CardDocument]
-    energy_max: int
     energy_current: int
     mulligan_taken: bool
 

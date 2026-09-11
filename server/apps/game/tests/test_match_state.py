@@ -104,7 +104,7 @@ def test_both_players_start_without_energy(match: Match) -> None:
     """Energia sobe no primeiro Upkeep, então a rodada 1 tem 1 (§4)."""
     player = match.player(PLAYER_ONE)
 
-    assert (player.energy_max, player.energy_current) == (0, 0)
+    assert player.energy_current == 0
 
 
 def test_every_card_zone_starts_empty(match: Match) -> None:

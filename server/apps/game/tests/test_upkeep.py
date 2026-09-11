@@ -1,4 +1,4 @@
-"""O Upkeep da §4: recarga de energia, uma compra por jogador, e a partida
+"""O Upkeep da §4: ganho de energia, uma compra por jogador, e a partida
 entrando na Fase de Ação.
 
 O teste central deste arquivo é
@@ -23,9 +23,7 @@ from apps.game.tests.fake_random_source import ScriptedRandomSource
 DECK_CARD_IDS = [31, 32, 33, 34, 35]
 
 
-def match_before_upkeep(
-    *, round_number: int = 1, energy_max: int = 0, energy_current: int = 0
-) -> Match:
+def match_before_upkeep(*, round_number: int = 1, energy_current: int = 0) -> Match:
     """Partida parada em `UPKEEP`, com deck em cada lado e as energias dadas."""
     match = fake_new_match()
 
@@ -36,7 +34,6 @@ def match_before_upkeep(
 
     for player in match.players:
         player.deck = fake_cards(match, DECK_CARD_IDS)
-        player.energy_max = energy_max
         player.energy_current = energy_current
 
     return match
@@ -54,43 +51,56 @@ def test_the_first_upkeep_gives_one_energy_to_both_players() -> None:
 
     run_upkeep(match, randomness=upkeep_source())
 
-    assert [player.energy_max for player in match.players] == [1, 1]
     assert [player.energy_current for player in match.players] == [1, 1]
 
 
-def test_the_maximum_energy_rises_by_one_each_round() -> None:
-    match = match_before_upkeep(round_number=3, energy_max=2)
-
-    run_upkeep(match, randomness=upkeep_source())
-
-    assert [player.energy_max for player in match.players] == [3, 3]
-
-
-def test_round_eleven_and_beyond_stay_at_ten() -> None:
-    """O teto da §12 se mantém, não vira 11."""
-    match = match_before_upkeep(round_number=11, energy_max=MAX_ENERGY)
-
-    run_upkeep(match, randomness=upkeep_source())
-
-    assert [player.energy_max for player in match.players] == [10, 10]
-    assert [player.energy_current for player in match.players] == [10, 10]
-
-
-def test_energy_left_over_from_the_previous_round_is_lost() -> None:
-    """Recarga total: a atual vira a máxima, não a máxima mais o que sobrou."""
-    match = match_before_upkeep(round_number=5, energy_max=4, energy_current=4)
+def test_round_n_adds_n_to_what_was_left() -> None:
+    """Fluxo de Partida §4, corrigido em 2026-09-11: sobrou 2, a rodada 3 dá 3."""
+    match = match_before_upkeep(round_number=3, energy_current=2)
 
     run_upkeep(match, randomness=upkeep_source())
 
     assert [player.energy_current for player in match.players] == [5, 5]
 
 
-def test_a_player_who_spent_everything_is_refilled_all_the_same() -> None:
-    match = match_before_upkeep(round_number=5, energy_max=4, energy_current=0)
+def test_energy_left_over_from_the_previous_round_is_kept() -> None:
+    """Acumula: sobrou 1 na rodada 1, a rodada 2 começa com 1 + 2 = 3."""
+    match = match_before_upkeep(round_number=2, energy_current=1)
+
+    run_upkeep(match, randomness=upkeep_source())
+
+    assert [player.energy_current for player in match.players] == [3, 3]
+
+
+def test_a_player_who_spent_everything_gets_only_the_round_gain() -> None:
+    match = match_before_upkeep(round_number=5, energy_current=0)
 
     run_upkeep(match, randomness=upkeep_source())
 
     assert match.players[0].energy_current == 5
+
+
+def test_the_gain_stops_at_the_ceiling() -> None:
+    """O teto da §12 corta o que passa de 10: sobrou 8, a rodada 4 daria 12."""
+    match = match_before_upkeep(round_number=4, energy_current=8)
+
+    run_upkeep(match, randomness=upkeep_source())
+
+    assert [player.energy_current for player in match.players] == [10, 10]
+
+
+def test_a_player_who_saves_everything_reaches_ten_in_round_four() -> None:
+    """1, 3, 6 e 10 da rodada 4 em diante, sem gastar nada."""
+    match = match_before_upkeep()
+    seen = []
+
+    for round_number in range(1, 7):
+        match.round_number = round_number
+        match.phase = MatchPhase.UPKEEP
+        run_upkeep(match, randomness=upkeep_source())
+        seen.append(match.players[0].energy_current)
+
+    assert seen == [1, 3, 6, 10, MAX_ENERGY, MAX_ENERGY]
 
 
 # --- Compra ------------------------------------------------------------------

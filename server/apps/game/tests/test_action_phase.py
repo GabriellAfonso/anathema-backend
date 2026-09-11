@@ -41,7 +41,6 @@ def match_in_action_phase(round_number: int = 1) -> Match:
     for player in match.players:
         player.deck = fake_cards(match, DECK_CARD_IDS)
         player.hand = fake_cards(match, [CHEAP_UNIT.card_id, CHEAP_UNIT.card_id])
-        player.energy_max = round_number
         player.energy_current = round_number
 
     return match
@@ -108,7 +107,7 @@ def test_passing_touches_no_card_zone_energy_or_nexus() -> None:
         (list(p.deck), list(p.hand), list(p.bank), list(p.graveyard))
         for p in match.players
     ]
-    energies = [(p.energy_max, p.energy_current, p.nexus) for p in match.players]
+    energies = [(p.energy_current, p.nexus) for p in match.players]
 
     act_pass(match)
 
@@ -116,9 +115,7 @@ def test_passing_touches_no_card_zone_energy_or_nexus() -> None:
         (list(p.deck), list(p.hand), list(p.bank), list(p.graveyard))
         for p in match.players
     ] == zones
-    assert [
-        (p.energy_max, p.energy_current, p.nexus) for p in match.players
-    ] == energies
+    assert [(p.energy_current, p.nexus) for p in match.players] == energies
 
 
 # --- A alternância -----------------------------------------------------------

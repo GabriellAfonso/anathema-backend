@@ -37,7 +37,6 @@ class PlayerSideView(TypedDict):
 
     profile: PlayerData
     nexus: int
-    energy_max: int
     energy_current: int
     hand: list[CardDocument]
     bank: list[BankUnitDocument]
@@ -54,7 +53,6 @@ class OpponentSideView(TypedDict):
 
     profile: PlayerData
     nexus: int
-    energy_max: int
     energy_current: int
     hand_size: int
     bank: list[BankUnitDocument]
@@ -116,7 +114,6 @@ def _own_side(player: PlayerState) -> PlayerSideView:
     return {
         "profile": player.profile,
         "nexus": player.nexus,
-        "energy_max": player.energy_max,
         "energy_current": player.energy_current,
         "hand": [to_card_document(card) for card in player.hand],
         "bank": [to_bank_unit_document(unit) for unit in player.bank],
@@ -130,7 +127,6 @@ def _opponent_side(opponent: PlayerState) -> OpponentSideView:
     return {
         "profile": opponent.profile,
         "nexus": opponent.nexus,
-        "energy_max": opponent.energy_max,
         "energy_current": opponent.energy_current,
         "hand_size": len(opponent.hand),
         "bank": [to_bank_unit_document(unit) for unit in opponent.bank],

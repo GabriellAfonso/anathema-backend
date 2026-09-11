@@ -76,7 +76,6 @@ def match_in_action_phase(round_number: int = 1) -> Match:
 
     for player in match.players:
         player.deck = fake_cards(match, list(range(31, 61)))
-        player.energy_max = round_number
         player.energy_current = round_number
 
     return match
@@ -109,7 +108,6 @@ def test_the_first_push_gives_one_energy_to_both_sides() -> None:
 
     begin_round_cycle(match, randomness=source())
 
-    assert [player.energy_max for player in match.players] == [1, 1]
     assert [player.energy_current for player in match.players] == [1, 1]
 
 
@@ -169,7 +167,8 @@ def test_a_single_pass_delivers_the_whole_next_round() -> None:
     assert match.round_number == 2
     assert match.phase is MatchPhase.ACTION
     assert match.consecutive_passes == 0
-    assert [player.energy_current for player in match.players] == [2, 2]
+    # 1 que sobrou da rodada 1, mais o ganho de 2 da rodada 2 (§4).
+    assert [player.energy_current for player in match.players] == [3, 3]
     assert [len(player.hand) for player in match.players] == [
         size + 1 for size in hands_before
     ]
@@ -201,7 +200,10 @@ def test_the_energy_stops_at_ten_and_stays_there() -> None:
         act_pass(match)
 
     assert match.round_number == 13
-    assert [player.energy_max for player in match.players] == [MAX_ENERGY, MAX_ENERGY]
+    assert [player.energy_current for player in match.players] == [
+        MAX_ENERGY,
+        MAX_ENERGY,
+    ]
 
 
 def test_the_token_changes_hands_every_round() -> None:
@@ -231,14 +233,18 @@ def test_the_sweep_happens_before_the_token_changes_hands() -> None:
     assert match.token_holder_user_id == PLAYER_TWO
 
 
-def test_the_upkeep_draw_happens_with_the_round_already_raised() -> None:
+def test_the_upkeep_gain_happens_with_the_round_already_raised() -> None:
+    """A rodada 5 dá 5: o ganho é lido depois de o Fim de Rodada subir a
+    rodada."""
     match = match_in_action_phase(round_number=4)
+    for player in match.players:
+        player.energy_current = 0
 
     act_pass(match)
     act_pass(match)
 
     assert match.round_number == 5
-    assert [player.energy_max for player in match.players] == [5, 5]
+    assert [player.energy_current for player in match.players] == [5, 5]
 
 
 def test_a_cascade_with_both_hands_full_still_settles() -> None:
