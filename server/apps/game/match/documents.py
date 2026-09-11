@@ -71,15 +71,6 @@ class MatchOutcomeDocument(TypedDict):
     defeated_user_ids: list[int]
 
 
-class StackEntryDocument(TypedDict):
-    """O alvo é o identificador, nunca uma referência. `None` é ausência de
-    alvo, não alvo que sumiu."""
-
-    card: CardDocument
-    caster_user_id: int
-    target_card_instance_id: int | None
-
-
 class BlockAssignmentDocument(TypedDict):
     """Um par do bloqueio da §7.2.
 
@@ -132,7 +123,6 @@ class MatchDocument(TypedDict):
     # `None` enquanto a partida corre, como `token_holder_user_id` é `None`
     # antes do sorteio da §3. Anda junto de `phase == "finished"`.
     outcome: MatchOutcomeDocument | None
-    stack: list[StackEntryDocument]
     # `None` fora da §7. Obrigatória e anulável, e não ausente: `total=False`
     # tornaria **todo** o documento opcional, que é o argumento que `outcome`
     # já usou.

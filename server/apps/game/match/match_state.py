@@ -10,7 +10,7 @@ regra, e regra é do motor.
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 
 from apps.game.randomness import RandomSeed, Roll
@@ -19,7 +19,6 @@ from .cards_in_play import BankUnit, CardInstanceId
 from .combat_state import CombatState
 from .match_outcome import MatchOutcome
 from .player_state import PlayerState
-from .spell_stack import StackEntry
 
 
 class MatchPhase(StrEnum):
@@ -47,7 +46,6 @@ class MatchPhase(StrEnum):
     MULLIGAN = "mulligan"
     UPKEEP = "upkeep"
     ACTION = "action"
-    STACK_RESOLUTION = "stack_resolution"
     COMBAT = "combat"
     ROUND_END = "round_end"
     FINISHED = "finished"
@@ -133,8 +131,6 @@ class Match:
     # cascata lê para parar e o que `allowed_phases` compara para recusar; isto
     # é quem perdeu, que a fase não sabe dizer e não deveria.
     outcome: MatchOutcome | None = None
-    # Fim da lista é o topo: `append` empilha, e a resolução é LIFO (§6).
-    stack: list[StackEntry] = field(default_factory=list)
     # `None` é "não há combate", e não valor de espera: fora da §7 não existe
     # pareamento, e um `CombatState` vazio permanente confundiria "ninguém
     # bloqueou" com "ninguém atacou".
@@ -240,13 +236,14 @@ class Match:
     def bank_unit(self, card_instance_id: CardInstanceId) -> BankUnit | None:
         """A unidade em campo com aquele identificador, ou `None`.
 
-        É a revalidação de alvo da §6, e `None` **não é erro**: é a resposta
-        que autoriza o fizzle. Quem pergunta não precisa saber de qual jogador
-        o alvo é, nem envolver a chamada em `try`.
+        `None` **não é erro**: é a resposta que torna o bloqueador órfão da
+        §7.3 possível de perguntar -- o atacante que um feitiço do defensor
+        matou não está mais em campo. Quem pergunta não precisa saber de qual
+        jogador a unidade é, nem envolver a chamada em `try`.
 
         Diverge de `player()`, que levanta, porque as perguntas são
-        diferentes: pedir um jogador que não joga é bug; perguntar por um alvo
-        que sumiu é o caso normal.
+        diferentes: pedir um jogador que não joga é bug; perguntar por uma
+        unidade que saiu de campo é o caso normal.
 
         >>> match.bank_unit(CardInstanceId(3)) is None
         True

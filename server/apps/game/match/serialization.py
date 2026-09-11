@@ -6,7 +6,7 @@ aqui, não dentro de `BankUnit`.
 
 Garantia: para qualquer estado válido,
 `match_from_document(json.loads(json.dumps(to_match_document(match))))` é
-igual ao original -- identificadores, contador, ordem do deck, ordem da pilha,
+igual ao original -- identificadores, contador, ordem do deck,
 dano acumulado, modificadores e o pareamento de bloqueadores da §7.2 inclusive.
 """
 
@@ -24,7 +24,6 @@ from .documents import (
     MatchOutcomeDocument,
     ModifierDocument,
     PlayerDocument,
-    StackEntryDocument,
 )
 from .match_outcome import MatchOutcome
 from .match_state import Match, MatchPhase
@@ -36,7 +35,6 @@ from .modifiers import (
     UnitModifier,
 )
 from .player_state import PlayerState
-from .spell_stack import StackEntry
 
 
 def to_match_document(match: Match) -> MatchDocument:
@@ -54,7 +52,6 @@ def to_match_document(match: Match) -> MatchDocument:
         "priority_user_id": match.priority_user_id,
         "phase": match.phase,
         "outcome": to_match_outcome_document(match.outcome),
-        "stack": [to_stack_entry_document(entry) for entry in match.stack],
         "combat": to_combat_document(match.combat),
         "consecutive_passes": match.consecutive_passes,
         "next_card_instance_id": match.next_card_instance_id,
@@ -80,7 +77,6 @@ def match_from_document(document: MatchDocument) -> Match:
         token_consumed=document["token_consumed"],
         phase=MatchPhase(document["phase"]),
         outcome=match_outcome_from_document(document["outcome"]),
-        stack=[stack_entry_from_document(entry) for entry in document["stack"]],
         combat=combat_from_document(document["combat"]),
         consecutive_passes=document["consecutive_passes"],
         next_card_instance_id=document["next_card_instance_id"],
@@ -167,24 +163,6 @@ def match_outcome_from_document(
         return None
 
     return MatchOutcome(defeated_user_ids=tuple(document["defeated_user_ids"]))
-
-
-def to_stack_entry_document(entry: StackEntry) -> StackEntryDocument:
-    return {
-        "card": to_card_document(entry.card),
-        "caster_user_id": entry.caster_user_id,
-        "target_card_instance_id": entry.target_card_instance_id,
-    }
-
-
-def stack_entry_from_document(document: StackEntryDocument) -> StackEntry:
-    target = document["target_card_instance_id"]
-
-    return StackEntry(
-        card=card_from_document(document["card"]),
-        caster_user_id=document["caster_user_id"],
-        target_card_instance_id=None if target is None else CardInstanceId(target),
-    )
 
 
 def to_combat_document(combat: CombatState | None) -> CombatDocument | None:

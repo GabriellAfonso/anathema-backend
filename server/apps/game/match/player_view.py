@@ -21,7 +21,6 @@ from .documents import (
     CardDocument,
     CombatDocument,
     MatchOutcomeDocument,
-    StackEntryDocument,
 )
 from .match_state import Match, MatchPhase
 from .player_state import PlayerState
@@ -30,7 +29,6 @@ from .serialization import (
     to_card_document,
     to_combat_document,
     to_match_outcome_document,
-    to_stack_entry_document,
 )
 
 
@@ -80,9 +78,8 @@ class PlayerView(TypedDict):
     # `None` enquanto a partida corre. O desfecho não é segredo de ninguém: sem
     # ele o cliente teria o estado terminal e não teria o resultado.
     outcome: MatchOutcomeDocument | None
-    stack: list[StackEntryDocument]
     # `None` fora da §7. Aparece inteiro para os dois lados: quem ataca quem é
-    # fato revelado, como a pilha -- sem ele o cliente não tem como desenhar o
+    # fato revelado, como o cemitério -- sem ele o cliente não tem como desenhar o
     # combate. Esconder seria esconder do defensor a própria declaração dele.
     combat: CombatDocument | None
     you: PlayerSideView
@@ -107,7 +104,6 @@ def build_player_view(match: Match, user_id: int) -> PlayerView:
         "token_consumed": match.token_consumed,
         "consecutive_passes": match.consecutive_passes,
         "outcome": to_match_outcome_document(match.outcome),
-        "stack": [to_stack_entry_document(entry) for entry in match.stack],
         "combat": to_combat_document(match.combat),
         "you": _own_side(match.player(user_id)),
         "opponent": _opponent_side(match.opponent_of(user_id)),

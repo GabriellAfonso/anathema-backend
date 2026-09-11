@@ -25,7 +25,6 @@ from .documents import (
     MatchOutcomeDocument,
     ModifierDocument,
     PlayerDocument,
-    StackEntryDocument,
 )
 from .match_outcome import InvalidMatchOutcomeError, MatchOutcome
 from .match_state import (
@@ -56,7 +55,6 @@ from .serialization import (
     to_match_document,
     to_match_outcome_document,
 )
-from .spell_stack import StackEntry
 
 __all__ = [
     # Cartas em partida
@@ -69,8 +67,6 @@ __all__ = [
     "HealthModifier",
     "DamageImmunity",
     "UnitModifier",
-    # Pilha
-    "StackEntry",
     # Combate (§7)
     "BlockAssignment",
     "CombatState",
@@ -88,7 +84,6 @@ __all__ = [
     "CardDocument",
     "ModifierDocument",
     "BankUnitDocument",
-    "StackEntryDocument",
     "BlockAssignmentDocument",
     "CombatDocument",
     "PlayerDocument",
