@@ -22,8 +22,8 @@ prevendo. Na 008 a união perdeu um braço, quando o feitiço da janela do defen
 deixou de ser uma ação separada.
 
 **Ficar com a vez mora na ação, e é isso que impede a exceção de vazar.** Quem
-joga unidade, declara ataque ou passa entrega a vez; quem joga feitiço (§5B, em
-qualquer fase) ou age na janela do defensor (§7.2) fica com ela.
+joga unidade, passa ou confirma o ataque entrega a vez; quem joga feitiço (§5B,
+em qualquer fase) ou age numa janela do combate (§7.1, §7.2) fica com ela.
 `keeps_priority` é a propriedade da ação que diz qual das duas vale, e
 `round_cycle._pass_priority` só a lê -- ela não conhece nenhuma das duas
 exceções, e cada braço declara a sua resposta por si.
@@ -55,8 +55,10 @@ from apps.game.match import (
 from .action_kind import ActionKind
 from .combat_action import (
     AssignBlockerAction,
+    ConfirmAttackAction,
     EndDefenseWindowAction,
     RemoveBlockerAction,
+    WithdrawAttackerAction,
 )
 
 
@@ -83,9 +85,9 @@ class PlayUnitAction:
     allowed_phases: ClassVar[frozenset[MatchPhase]] = frozenset({MatchPhase.ACTION})
     # Se a ação devolve a vez. Mora na ação pela mesma razão que
     # `allowed_phases` mora: a §5 escreve que a vez passa depois de jogar
-    # unidade, declarar ataque ou passar, e as exceções são duas -- jogar
-    # feitiço, que não gasta a vez (§5B), e a janela do defensor, em que ele age
-    # quantas vezes quiser (§7.2).
+    # unidade ou passar, e as exceções são jogar feitiço, que não gasta a vez
+    # (§5B), e as janelas do combate, em que atacante e defensor agem quantas
+    # vezes quiserem (§7.1, §7.2).
     #
     # Escrever as exceções aqui, e não numa condição dentro de
     # `round_cycle._pass_priority`, é o que as impede de vazar: quem lê aquela
@@ -143,8 +145,10 @@ class CastSpellAction:
     """
 
     action_kind: ClassVar[ActionKind] = ActionKind.CAST_SPELL
+    # As três fases em que alguém tem a vez para agir: a Fase de Ação, a
+    # declaração do atacante (§7.1) e a defesa (§7.2).
     allowed_phases: ClassVar[frozenset[MatchPhase]] = frozenset(
-        {MatchPhase.ACTION, MatchPhase.COMBAT}
+        {MatchPhase.ACTION, MatchPhase.DECLARATION, MatchPhase.COMBAT}
     )
     keeps_priority: ClassVar[bool] = True
 
@@ -155,7 +159,12 @@ class CastSpellAction:
 
 @dataclass(frozen=True, slots=True)
 class DeclareAttackAction:
-    """Declarar ataque (§5C). A quarta e última ação da Fase de Ação.
+    """Declarar ataque (§5C) e mandar mais atacantes na declaração (§7.1).
+
+    Na Fase de Ação abre a declaração com as unidades escolhidas na zona de
+    ataque; dentro dela, acrescenta unidades à zona. Nada é consumido: quem
+    consome o token é `ConfirmAttackAction`, e a vez fica com o atacante
+    enquanto ele monta a zona.
 
     `attacker_card_instance_ids` é uma tupla e não uma lista: a ação é
     `frozen=True`, e uma lista dentro dela seria um campo imutável apontando
@@ -172,11 +181,12 @@ class DeclareAttackAction:
     """
 
     action_kind: ClassVar[ActionKind] = ActionKind.DECLARE_ATTACK
-    allowed_phases: ClassVar[frozenset[MatchPhase]] = frozenset({MatchPhase.ACTION})
-    # `False`: declarar ataque gasta a vez como jogar unidade e passar, e a
-    # prioridade passa ao oponente -- que é exatamente o defensor de quem a §7.2
-    # fala.
-    keeps_priority: ClassVar[bool] = False
+    allowed_phases: ClassVar[frozenset[MatchPhase]] = frozenset(
+        {MatchPhase.ACTION, MatchPhase.DECLARATION}
+    )
+    # `True` desde a correção da nota de 2026-09-11: declarar abre uma janela
+    # do atacante, e quem entrega a vez ao defensor é **Atacar**.
+    keeps_priority: ClassVar[bool] = True
 
     actor_user_id: int
     attacker_card_instance_ids: tuple[CardInstanceId, ...]
@@ -189,6 +199,8 @@ PlayerAction = (
     | PassAction
     | CastSpellAction
     | DeclareAttackAction
+    | WithdrawAttackerAction
+    | ConfirmAttackAction
     | AssignBlockerAction
     | RemoveBlockerAction
     | EndDefenseWindowAction

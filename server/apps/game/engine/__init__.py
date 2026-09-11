@@ -40,6 +40,7 @@ from .blocker_pairing import (
     UnitIsNotAttackingError,
 )
 from .declare_attack import (
+    UnitAlreadyAttackingError,
     AttackerNotInBankError,
     AttackTokenAlreadyConsumedError,
     BankHasNoUnitsError,
@@ -66,8 +67,10 @@ from .play_unit import (
 from .action_kind import ActionKind
 from .combat_action import (
     AssignBlockerAction,
+    ConfirmAttackAction,
     EndDefenseWindowAction,
     RemoveBlockerAction,
+    WithdrawAttackerAction,
 )
 from .player_action import (
     CardNotInHandError,
@@ -133,7 +136,9 @@ __all__ = [
     "DeclareAttackAction",
     "PassAction",
     "PlayerAction",
-    # A forma das ações que só existem na janela do defensor (§7.2)
+    # A forma das ações que só existem nas janelas do combate (§7.1, §7.2)
+    "WithdrawAttackerAction",
+    "ConfirmAttackAction",
     "AssignBlockerAction",
     "RemoveBlockerAction",
     "EndDefenseWindowAction",
@@ -165,6 +170,7 @@ __all__ = [
     "NoAttackersSelectedError",
     "AttackerNotInBankError",
     "DuplicateAttackerError",
+    "UnitAlreadyAttackingError",
     # Recusas de bloqueio (§7.2)
     #
     # `assign_blocker` e `remove_blocker` **não** entram aqui, pela mesma razão:

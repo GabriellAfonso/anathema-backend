@@ -1,16 +1,21 @@
-"""A §5C: o token é consumido, os atacantes ficam registrados e a partida entra
-em Combate.
+"""A §5C e a declaração da §7.1: a zona de ataque, e **Atacar**.
+
+Fluxo de Partida, corrigido em 2026-09-11: declarar ataque abre uma janela do
+atacante. Ele manda unidades para a zona, puxa de volta e joga feitiço, e nada é
+consumido até **Atacar**. Puxou todas de volta, a partida volta à Fase de Ação
+como se ele não tivesse declarado.
 
 Três metades. O caminho aceito -- e o que ele **não** faz, que é tão contrato
 quanto o que faz: nenhuma carta se move, nenhuma energia é gasta, nenhum Nexus
 muda. As seis recusas, cada uma nomeando o valor ofensor e provando por
 `match_snapshot` que o estado ficou idêntico. E a cascata, que é onde esta
 feature podia dar errado sem ninguém notar: `submit_action` precisa devolver a
-partida **parada em Combate**, e não em Fim de Rodada.
+partida **parada na declaração**, e depois de **Atacar** parada em Combate --
+nunca em Fim de Rodada.
 
 O teste central é `test_a_declaration_does_not_close_the_round`: com o oponente
-tendo passado uma vez, uma declaração que esquecesse de zerar os passes deixaria
-`_exit_action_phase` fechar a rodada por baixo do combate.
+tendo passado uma vez, a declaração mantém a contagem em 1 -- ela não é jogada
+que quebre a sequência --, e é **Atacar** que a zera antes de o combate começar.
 """
 
 import pytest
@@ -18,6 +23,10 @@ import pytest
 from apps.game.cards import CardCatalog, mvp_catalog
 from apps.game.engine import (
     AttackerNotInBankError,
+    ConfirmAttackAction,
+    UnitAlreadyAttackingError,
+    UnitIsNotAttackingError,
+    WithdrawAttackerAction,
     CastSpellAction,
     AttackTokenAlreadyConsumedError,
     BankHasNoUnitsError,
@@ -47,6 +56,7 @@ from apps.game.tests.fake_combat_board import (
     POLAROID,
     SKILLET,
     LIFE_POTION,
+    SOMEONES_SHIELD,
     SUMMONED_AX,
     bank_card,
     fake_combat_board,
@@ -99,6 +109,30 @@ def declare(
     )
 
 
+def withdraw(
+    match: Match, index: int, *, catalog: CardCatalog, source: RandomSource
+) -> None:
+    """Puxa de volta a unidade daquela posição do banco do atacante."""
+    submit_action(
+        match,
+        WithdrawAttackerAction(
+            actor_user_id=PLAYER_ONE,
+            attacker_card_instance_id=bank_card(match.player(PLAYER_ONE), index),
+        ),
+        catalog=catalog,
+        randomness=source,
+    )
+
+
+def attack(match: Match, *, catalog: CardCatalog, source: RandomSource) -> None:
+    submit_action(
+        match,
+        ConfirmAttackAction(actor_user_id=PLAYER_ONE),
+        catalog=catalog,
+        randomness=source,
+    )
+
+
 # --- O caminho aceito --------------------------------------------------------
 
 
@@ -146,10 +180,35 @@ def test_the_declaration_order_is_the_one_asked_for(
     ]
 
 
-def test_the_token_is_consumed(
+def test_more_units_can_be_sent_after_the_first(
+    match: Match, catalog: CardCatalog, source: RandomSource
+) -> None:
+    """Uma a uma ou várias de uma vez (§7.1)."""
+    one = match.player(PLAYER_ONE)
+
+    declare(match, 0, catalog=catalog, source=source)
+    declare(match, 2, catalog=catalog, source=source)
+
+    assert match.combat is not None
+    assert match.combat.attacker_card_instance_ids == [
+        bank_card(one, 0),
+        bank_card(one, 2),
+    ]
+
+
+def test_nothing_is_consumed_before_the_attack(
     match: Match, catalog: CardCatalog, source: RandomSource
 ) -> None:
     declare(match, 0, catalog=catalog, source=source)
+
+    assert match.token_consumed is False
+
+
+def test_the_attack_consumes_the_token(
+    match: Match, catalog: CardCatalog, source: RandomSource
+) -> None:
+    declare(match, 0, catalog=catalog, source=source)
+    attack(match, catalog=catalog, source=source)
 
     assert match.token_consumed is True
 
@@ -195,46 +254,124 @@ def test_a_declaration_touches_no_nexus_and_no_damage(
 # --- A cascata ---------------------------------------------------------------
 
 
-def test_the_match_stops_in_combat_waiting_for_the_defender(
+def test_the_match_waits_in_the_declaration_for_the_attacker(
     match: Match, catalog: CardCatalog, source: RandomSource
 ) -> None:
-    """O único ponto do jogo em que `submit_action` devolve a partida fora da
-    Fase de Ação sem ela ter acabado."""
     declare(match, 0, catalog=catalog, source=source)
+
+    assert match.phase is MatchPhase.DECLARATION
+    assert match.priority_user_id == PLAYER_ONE
+
+
+def test_the_attack_opens_the_defense_window(
+    match: Match, catalog: CardCatalog, source: RandomSource
+) -> None:
+    declare(match, 0, catalog=catalog, source=source)
+    attack(match, catalog=catalog, source=source)
 
     assert match.phase is MatchPhase.COMBAT
-
-
-def test_the_priority_goes_to_the_defender(
-    match: Match, catalog: CardCatalog, source: RandomSource
-) -> None:
-    declare(match, 0, catalog=catalog, source=source)
-
     assert match.priority_user_id == PLAYER_TWO
 
 
-def test_a_declaration_zeroes_the_pass_count(
+def test_a_declaration_keeps_the_pass_count(
     match: Match, catalog: CardCatalog, source: RandomSource
 ) -> None:
     match.consecutive_passes = 1
 
     declare(match, 0, catalog=catalog, source=source)
 
+    assert match.consecutive_passes == 1
+
+
+def test_the_attack_zeroes_the_pass_count(
+    match: Match, catalog: CardCatalog, source: RandomSource
+) -> None:
+    match.consecutive_passes = 1
+    declare(match, 0, catalog=catalog, source=source)
+
+    attack(match, catalog=catalog, source=source)
+
     assert match.consecutive_passes == 0
+
+
+# --- Puxar de volta ----------------------------------------------------------
+
+
+def test_a_unit_can_be_pulled_back(
+    match: Match, catalog: CardCatalog, source: RandomSource
+) -> None:
+    one = match.player(PLAYER_ONE)
+    declare(match, 0, 1, catalog=catalog, source=source)
+
+    withdraw(match, 0, catalog=catalog, source=source)
+
+    assert match.combat is not None
+    assert match.combat.attacker_card_instance_ids == [bank_card(one, 1)]
+    assert match.phase is MatchPhase.DECLARATION
+
+
+def test_pulling_every_unit_back_is_as_if_nobody_declared(
+    match: Match, catalog: CardCatalog, source: RandomSource
+) -> None:
+    """Token disponível, vez com o atacante, passes onde estavam (§7.1)."""
+    match.consecutive_passes = 1
+    before = match_snapshot(match)
+
+    declare(match, 0, 1, catalog=catalog, source=source)
+    withdraw(match, 1, catalog=catalog, source=source)
+    withdraw(match, 0, catalog=catalog, source=source)
+
+    assert match_snapshot(match) == before
+
+
+def test_after_pulling_back_the_attacker_can_declare_again(
+    match: Match, catalog: CardCatalog, source: RandomSource
+) -> None:
+    declare(match, 0, catalog=catalog, source=source)
+    withdraw(match, 0, catalog=catalog, source=source)
+
+    declare(match, 2, catalog=catalog, source=source)
+
+    assert match.phase is MatchPhase.DECLARATION
+
+
+def test_the_attacker_can_cast_a_spell_in_the_declaration(
+    catalog: CardCatalog, source: RandomSource
+) -> None:
+    match = fake_combat_board(
+        catalog=catalog, hand_one=(SOMEONES_SHIELD,), bank_one=(DARK_AGE,)
+    )
+    one = match.player(PLAYER_ONE)
+    declare(match, 0, catalog=catalog, source=source)
+
+    submit_action(
+        match,
+        CastSpellAction(PLAYER_ONE, hand_card(one, SOMEONES_SHIELD), bank_card(one)),
+        catalog=catalog,
+        randomness=source,
+    )
+
+    assert one.bank[0].modifiers != []
+    assert (match.phase, match.priority_user_id) == (
+        MatchPhase.DECLARATION,
+        PLAYER_ONE,
+    )
 
 
 def test_a_declaration_does_not_close_the_round(
     match: Match, catalog: CardCatalog, source: RandomSource
 ) -> None:
-    """Com o oponente tendo passado uma vez, uma declaração que esquecesse de
-    zerar os passes deixaria a saída da §5 fechar a rodada por baixo do
-    combate: dois passes consecutivos são Fim de Rodada."""
+    """Com o oponente tendo passado uma vez, a declaração deixa a contagem em
+    1 e a saída da §5 inerte; **Atacar** a zera antes de o combate começar."""
     submit_action(
         match, PassAction(actor_user_id=PLAYER_ONE), catalog=catalog, randomness=source
     )
     match.priority_user_id = PLAYER_ONE
 
     declare(match, 0, catalog=catalog, source=source)
+    assert (match.consecutive_passes, match.phase) == (1, MatchPhase.DECLARATION)
+
+    attack(match, catalog=catalog, source=source)
 
     assert match.consecutive_passes == 0
     assert match.phase is MatchPhase.COMBAT
@@ -262,12 +399,14 @@ def test_spells_then_an_attack_in_the_same_turn(
         assert match.priority_user_id == PLAYER_ONE
 
     declare(match, 0, catalog=catalog, source=source)
+    assert match.priority_user_id == PLAYER_ONE
+    attack(match, catalog=catalog, source=source)
 
     assert match.phase is MatchPhase.COMBAT
     assert match.priority_user_id == PLAYER_TWO
 
 
-# --- As seis recusas ---------------------------------------------------------
+# --- As recusas --------------------------------------------------------------
 
 
 def test_a_player_without_the_token_is_refused_naming_the_holder(
@@ -387,6 +526,31 @@ def test_the_same_unit_twice_is_refused_naming_the_unit(
     assert match_snapshot(match) == before
 
 
+def test_a_unit_already_in_the_attack_zone_is_refused(
+    match: Match, catalog: CardCatalog, source: RandomSource
+) -> None:
+    declare(match, 0, catalog=catalog, source=source)
+    before = match_snapshot(match)
+
+    with pytest.raises(UnitAlreadyAttackingError) as refusal:
+        declare(match, 0, catalog=catalog, source=source)
+
+    assert refusal.value.card_instance_id == bank_card(match.player(PLAYER_ONE), 0)
+    assert match_snapshot(match) == before
+
+
+def test_pulling_back_a_unit_that_is_not_attacking_is_refused(
+    match: Match, catalog: CardCatalog, source: RandomSource
+) -> None:
+    declare(match, 0, catalog=catalog, source=source)
+    before = match_snapshot(match)
+
+    with pytest.raises(UnitIsNotAttackingError):
+        withdraw(match, 1, catalog=catalog, source=source)
+
+    assert match_snapshot(match) == before
+
+
 # --- As guardas comuns -------------------------------------------------------
 
 
@@ -399,6 +563,31 @@ def test_declaring_without_priority_is_refused_before_the_token_is_looked_at(
 
     with pytest.raises(NotYourPriorityError):
         declare(match, 0, catalog=catalog, source=source)
+
+
+def test_pulling_back_or_attacking_outside_the_declaration_is_refused(
+    match: Match, catalog: CardCatalog, source: RandomSource
+) -> None:
+    with pytest.raises(PhaseForbidsActionError):
+        withdraw(match, 0, catalog=catalog, source=source)
+
+    with pytest.raises(PhaseForbidsActionError):
+        attack(match, catalog=catalog, source=source)
+
+
+def test_the_defender_cannot_act_during_the_declaration(
+    match: Match, catalog: CardCatalog, source: RandomSource
+) -> None:
+    """A declaração é janela do atacante: a vez é dele."""
+    declare(match, 0, catalog=catalog, source=source)
+
+    with pytest.raises(NotYourPriorityError):
+        submit_action(
+            match,
+            PassAction(actor_user_id=PLAYER_TWO),
+            catalog=catalog,
+            randomness=source,
+        )
 
 
 def test_declaring_outside_the_action_phase_is_refused(
@@ -424,6 +613,7 @@ def test_declaring_twice_in_the_same_round_is_refused(
     `test_combat_cleanup.py`.
     """
     declare(match, 0, catalog=catalog, source=source)
+    attack(match, catalog=catalog, source=source)
 
     with pytest.raises(NotYourPriorityError):
         declare(match, 1, catalog=catalog, source=source, actor_user_id=PLAYER_ONE)

@@ -29,12 +29,17 @@ class MatchPhase(StrEnum):
     partida já existe e já está gravada e o setup espera os dois jogadores
     decidirem. Uma partida sai dela quando o segundo responde e nunca volta.
 
-    `COMBAT` é a única fase que **espera** jogador sem ser a Fase de Ação, e
-    por isso está fora do conjunto de fases automáticas da cascata: a partida
-    para nela esperando o defensor, e quem a atravessa é a ação que encerra a
-    janela. É também a única em que a prioridade não troca depois de agir —
-    ver `keeps_priority` em `engine/player_action.py`. O pareamento que ela
-    precisa mora em `Match.combat`.
+    `DECLARATION` e `COMBAT` são as duas janelas da §7, e as únicas fases que
+    **esperam** jogador além da Fase de Ação. Por isso estão fora do conjunto de
+    fases automáticas da cascata. Na primeira a partida espera o atacante montar
+    a zona de ataque, e sai dela por **Atacar** ou puxando todos de volta; na
+    segunda espera o defensor, e sai por **Resolver**. Nas duas a prioridade
+    não troca enquanto se age na janela — ver `keeps_priority` em
+    `engine/player_action.py` —, e o que as duas precisam mora em
+    `Match.combat`.
+
+    `DECLARATION` entrou com a correção da nota de 2026-09-11: até então
+    declarar ataque era uma ação só, que consumia o token e ia direto à defesa.
 
     `FINISHED` também não é fase do ciclo: é o outro lado da partida, o da §10.
     É **terminal** — nenhuma transição sai dela — e está fora de
@@ -46,6 +51,7 @@ class MatchPhase(StrEnum):
     MULLIGAN = "mulligan"
     UPKEEP = "upkeep"
     ACTION = "action"
+    DECLARATION = "declaration"
     COMBAT = "combat"
     ROUND_END = "round_end"
     FINISHED = "finished"

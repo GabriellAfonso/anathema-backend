@@ -5,9 +5,10 @@ Este arquivo não acrescenta regra nenhuma: ele costura as sete features e
 verifica que elas se encontram.
 
 O roteiro é um jogador automático deliberadamente burro — joga todo feitiço que
-pode, ataca com tudo quando tem o token, joga unidade quando pode, nunca
-bloqueia, e passa quando não há mais o que fazer. No combate, o defensor joga
-feitiço enquanto pode e depois encerra a janela. É o suficiente para a partida
+pode, declara ataque com tudo quando tem o token e confirma **Atacar** logo
+depois de gastar os feitiços, joga unidade quando pode, nunca bloqueia, e passa
+quando não há mais o que fazer. No combate, o defensor joga feitiço enquanto
+pode e depois encerra a janela. É o suficiente para a partida
 acabar, e é de propósito que ele não decide nada: o que está sob teste é o
 motor, não a estratégia.
 
@@ -39,6 +40,7 @@ from apps.game.cards import (
 from apps.game.engine import (
     ActionKind,
     CastSpellAction,
+    ConfirmAttackAction,
     DeclareAttackAction,
     EndDefenseWindowAction,
     MAX_BANK_SIZE,
@@ -118,6 +120,9 @@ def next_action(match: Match, catalog: CardCatalog) -> PlayerAction:
 
     if spell is not None:
         return spell
+
+    if match.phase is MatchPhase.DECLARATION:
+        return ConfirmAttackAction(actor_user_id=actor.user_id)
 
     if match.phase is MatchPhase.COMBAT:
         return EndDefenseWindowAction(actor_user_id=actor.user_id)
@@ -303,6 +308,7 @@ def test_no_automatic_phase_is_ever_observed(
 
     assert set(observed) <= {
         MatchPhase.ACTION,
+        MatchPhase.DECLARATION,
         MatchPhase.COMBAT,
         MatchPhase.FINISHED,
     }
@@ -326,7 +332,7 @@ def test_the_match_never_stalls_in_combat(
     assert all(
         kind is ActionKind.CAST_SPELL
         for before, kind, after in steps
-        if before is MatchPhase.COMBAT and after is MatchPhase.COMBAT
+        if before is after and before in (MatchPhase.DECLARATION, MatchPhase.COMBAT)
     )
 
 

@@ -82,8 +82,9 @@ def fake_combat_board(
 def declare_combat(match: Match, *attacker_indexes: int) -> CombatState:
     """Põe a partida em Combate com aquelas posições do banco do atacante.
 
-    Atalho de **estado**, não de regra: escreve os quatro campos que a §7.1
-    escreveria, sem passar pela ação. Devolve o `CombatState` para o teste
+    Atalho de **estado**, não de regra: escreve os campos que declarar e
+    **Atacar** (§7.1) deixariam, sem passar pelas ações -- a partida sai já na
+    janela do defensor. Devolve o `CombatState` para o teste
     poder afirmar sobre ele sem reler `match.combat`.
 
     >>> declare_combat(match, 0, 1).attacker_card_instance_ids

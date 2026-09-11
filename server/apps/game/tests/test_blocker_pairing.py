@@ -23,6 +23,7 @@ from apps.game.engine import (
     BlockerNotAssignedError,
     BlockerNotInBankError,
     CastSpellAction,
+    ConfirmAttackAction,
     DeclareAttackAction,
     PassAction,
     PhaseForbidsActionError,
@@ -30,6 +31,7 @@ from apps.game.engine import (
     NotYourPriorityError,
     RemoveBlockerAction,
     UnitIsNotAttackingError,
+    WithdrawAttackerAction,
     submit_action,
 )
 from apps.game.match import CardInstanceId, Match, MatchPhase
@@ -290,11 +292,19 @@ def _still_the_defenders_turn(match: Match) -> None:
 
 
 def test_every_action_phase_arm_gives_the_turn_back() -> None:
-    """Ficar com a vez é propriedade da ação, e as três ações da §5 que gastam
-    a vez declaram que a devolvem. É o que impede a exceção de vazar."""
+    """Ficar com a vez é propriedade da ação, e as ações que gastam a vez
+    declaram que a devolvem: jogar unidade, passar e **Atacar**. É o que impede
+    a exceção de vazar."""
     assert not PlayUnitAction.keeps_priority
     assert not PassAction.keeps_priority
-    assert not DeclareAttackAction.keeps_priority
+    assert not ConfirmAttackAction.keeps_priority
+
+
+def test_every_declaration_arm_keeps_the_turn() -> None:
+    """A declaração é janela do atacante (§7.1): mandar e puxar não entregam a
+    vez."""
+    assert DeclareAttackAction.keeps_priority
+    assert WithdrawAttackerAction.keeps_priority
 
 
 def test_every_defense_window_arm_keeps_the_turn() -> None:

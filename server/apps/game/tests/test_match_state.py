@@ -45,6 +45,7 @@ def test_the_phase_set_is_closed(match: Match) -> None:
         "mulligan",
         "upkeep",
         "action",
+        "declaration",
         "combat",
         "round_end",
         "finished",

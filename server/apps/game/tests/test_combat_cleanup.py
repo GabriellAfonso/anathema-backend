@@ -19,6 +19,7 @@ from apps.game.cards import CardCatalog, CardId, mvp_catalog
 from apps.game.engine import (
     AssignBlockerAction,
     AttackTokenAlreadyConsumedError,
+    ConfirmAttackAction,
     DeclareAttackAction,
     EndDefenseWindowAction,
     NotTheTokenHolderError,
@@ -94,19 +95,20 @@ def board(
 def declare(
     match: Match, *indexes: int, catalog: CardCatalog, source: RandomSource
 ) -> None:
+    """Declara com aquelas posições do banco e confirma **Atacar** (§7.1): o
+    que estes testes precisam é a janela do defensor aberta."""
     one = match.player(PLAYER_ONE)
 
-    submit_action(
-        match,
+    for action in (
         DeclareAttackAction(
             actor_user_id=PLAYER_ONE,
             attacker_card_instance_ids=tuple(
                 bank_card(one, index) for index in indexes
             ),
         ),
-        catalog=catalog,
-        randomness=source,
-    )
+        ConfirmAttackAction(actor_user_id=PLAYER_ONE),
+    ):
+        submit_action(match, action, catalog=catalog, randomness=source)
 
 
 def block(
@@ -491,6 +493,12 @@ def test_the_new_token_holder_can_attack_in_the_next_round(
             actor_user_id=PLAYER_TWO,
             attacker_card_instance_ids=(bank_card(match.player(PLAYER_TWO)),),
         ),
+        catalog=catalog,
+        randomness=source,
+    )
+    submit_action(
+        match,
+        ConfirmAttackAction(actor_user_id=PLAYER_TWO),
         catalog=catalog,
         randomness=source,
     )

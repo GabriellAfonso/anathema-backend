@@ -212,11 +212,11 @@ def test_the_opponent_side_is_otherwise_untouched(
 
 
 def test_the_spell_keeps_the_turn_in_both_phases() -> None:
-    """Feitiço não gasta a vez (§5B), na Fase de Ação e na janela do defensor,
-    e é a mesma ação nas duas."""
+    """Feitiço não gasta a vez (§5B), na Fase de Ação e nas duas janelas do
+    combate, e é a mesma ação nas três."""
     assert CastSpellAction.keeps_priority
     assert CastSpellAction.allowed_phases == frozenset(
-        {MatchPhase.ACTION, MatchPhase.COMBAT}
+        {MatchPhase.ACTION, MatchPhase.DECLARATION, MatchPhase.COMBAT}
     )
 
 

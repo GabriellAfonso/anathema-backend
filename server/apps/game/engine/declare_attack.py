@@ -1,12 +1,23 @@
-"""A ação C da §5: declarar ataque, e com ela a entrada do combate da §7.1.
+"""A ação C da §5 e a declaração da §7.1: montar a zona de ataque e atacar.
 
-Cinco perguntas, nesta ordem, e a ordem é parte da regra:
+Fluxo de Partida, corrigido em 2026-09-11: declarar ataque abre uma janela do
+atacante. Nela ele manda unidades para a zona de ataque, puxa de volta, e joga
+feitiço; nada é consumido até **Atacar**. Puxou todas de volta, a partida volta
+à Fase de Ação como se ele não tivesse declarado -- o token disponível, a vez
+com ele, e a contagem de passes onde estava.
+
+A zona de ataque é `CombatState.attacker_card_instance_ids`. A unidade mandada
+não sai do banco do dono -- é o mesmo desenho da feature 007, e é o que faz "os
+sobreviventes voltam pro banco" da §7.4 valer sem código.
+
+Mandar atacante faz seis perguntas, nesta ordem, e a ordem é parte da regra:
 
     1. o autor é o dono do token de ataque
     2. o token ainda não foi consumido nesta rodada
     3. o banco do autor tem alguma unidade
     4. a seleção tem ao menos uma unidade
     5. cada unidade citada está no banco do autor, uma vez só
+    6. nenhuma unidade citada já está na zona de ataque
 
 Eram seis até a feature 008: a terceira exigia que nenhum feitiço estivesse
 esperando para resolver, e com o feitiço resolvendo na hora nunca há.
@@ -24,7 +35,8 @@ ordem que garante que uma recusa deixa o estado idêntico, e não um rollback qu
 alguém teria de manter completo.
 
 Nenhuma carta se move e nenhuma energia é gasta: declarar ataque não é jogar
-carta. O que muda é o token, a contagem de passes e o par `(combat, phase)`.
+carta. Na declaração o que muda é só o par `(combat, phase)`; em **Atacar**, o
+token e a contagem de passes.
 """
 
 from apps.game.match import (
@@ -35,6 +47,8 @@ from apps.game.match import (
     PlayerState,
 )
 
+from .blocker_pairing import UnitIsNotAttackingError
+from .combat_action import WithdrawAttackerAction
 from .player_action import DeclareAttackAction, IllegalActionError
 
 
@@ -157,34 +171,93 @@ class DuplicateAttackerError(IllegalActionError):
         self.card_instance_id = card_instance_id
 
 
+class UnitAlreadyAttackingError(IllegalActionError):
+    """Mandaram para a zona de ataque uma unidade que já está lá (§7.1).
+
+    Distinta de `DuplicateAttackerError`, que é a mesma unidade duas vezes na
+    mesma seleção: esta é a tela que ofereceu de novo uma unidade já mandada.
+
+    >>> raise UnitAlreadyAttackingError(CardInstanceId(3), "m-1")
+    UnitAlreadyAttackingError: card instance 3 is already in the attack zone of
+    match 'm-1': expected a unit still in the bank
+    """
+
+    def __init__(self, card_instance_id: CardInstanceId, match_id: str) -> None:
+        super().__init__(
+            f"card instance {card_instance_id} is already in the attack zone of "
+            f"match {match_id!r}: expected a unit still in the bank"
+        )
+        self.card_instance_id = card_instance_id
+
+
 def declare_attack(
     match: Match, actor: PlayerState, action: DeclareAttackAction
 ) -> None:
-    """A §5C: consome o token, registra os atacantes e entra em Combate.
+    """A §5C e o "mandar atacante" da §7.1: as unidades vão para a zona.
+
+    Na Fase de Ação abre a declaração; dentro dela, acrescenta à zona. Não
+    consome o token, não mexe na contagem de passes, e não troca a vez --
+    `keeps_priority` é `True`.
 
     Recebe o `actor` que `ensure_action_allowed` já buscou, como `play_unit` e
     `cast_spell`. Não recebe `catalog`: nenhuma guarda daqui lê molde de carta.
 
-    Zera a contagem de passes, como toda jogada -- a §5 conta passes
-    **consecutivos**. É essa zeragem que deixa `_exit_action_phase` inerte
-    durante o combate inteiro, sem que ela precise saber da §7.
-
-    A prioridade **não** é trocada aqui. Quem troca é `submit_action`, e
-    `keeps_priority = False` a manda para o oponente do autor -- o defensor.
-
     >>> declare_attack(match, actor, action)
     >>> match.phase
-    <MatchPhase.COMBAT: 'combat'>
+    <MatchPhase.DECLARATION: 'declaration'>
     """
     _ensure_actor_holds_the_token(match, actor)
     _ensure_token_is_unconsumed(match, actor)
     _ensure_bank_has_units(actor)
     _ensure_selection_is_not_empty(actor, action)
     _ensure_every_attacker_is_in_the_bank(actor, action)
+    _ensure_none_is_already_attacking(match, action)
+
+    _send_to_the_attack_zone(match, action)
+
+
+def withdraw_attacker(match: Match, action: WithdrawAttackerAction) -> None:
+    """Puxa uma unidade da zona de ataque de volta ao banco (§7.1).
+
+    Puxar a última devolve a partida à Fase de Ação sem consumir nada.
+
+    >>> withdraw_attacker(match, action)
+    >>> match.phase
+    <MatchPhase.ACTION: 'action'>
+    """
+    combat = match.ongoing_combat()
+    attacker = action.attacker_card_instance_id
+
+    if not combat.is_attacking(attacker):
+        raise UnitIsNotAttackingError(
+            attacker, list(combat.attacker_card_instance_ids), match.match_id
+        )
+
+    combat.attacker_card_instance_ids.remove(attacker)
+
+    if not combat.attacker_card_instance_ids:
+        _close_the_declaration(match)
+
+
+def confirm_attack(match: Match) -> None:
+    """**Atacar** (§7.1): consome o token e abre a janela do defensor.
+
+    Zera a contagem de passes -- a §5 conta passes **consecutivos**, e um ataque
+    quebra a sequência. É essa zeragem que deixa `_exit_action_phase` inerte
+    durante a defesa sem que ela precise saber da §7.
+
+    A vez **não** é trocada aqui: `ConfirmAttackAction.keeps_priority` é
+    `False`, e `submit_action` a entrega ao oponente do autor -- o defensor.
+
+    >>> confirm_attack(match)
+    >>> match.phase
+    <MatchPhase.COMBAT: 'combat'>
+    """
+    match.ongoing_combat()
 
     match.token_consumed = True
     match.consecutive_passes = 0
-    _enter_combat(match, action)
+    match.phase = MatchPhase.COMBAT
 
 
 def _ensure_actor_holds_the_token(match: Match, actor: PlayerState) -> None:
@@ -249,15 +322,44 @@ def _ensure_every_attacker_is_in_the_bank(
         seen.add(card_instance_id)
 
 
-def _enter_combat(match: Match, action: DeclareAttackAction) -> None:
-    """Único ponto deste módulo que escreve o par `(combat, phase)`.
+def _ensure_none_is_already_attacking(
+    match: Match, action: DeclareAttackAction
+) -> None:
+    """Guarda 6: nenhuma unidade citada já está na zona de ataque.
 
-    A invariante `phase is COMBAT` ⟹ `combat is not None` vale porque existe um
-    lugar só onde ela pode ser quebrada de cada lado -- este na entrada, e
-    `combat_cleanup._leave_combat` na saída. É o argumento de
-    `victory._finish_match`, aplicado a uma transição que tem ida e volta.
+    Só tem o que perguntar dentro da declaração; na Fase de Ação não existe
+    zona ainda.
     """
-    match.combat = CombatState(
-        attacker_card_instance_ids=list(action.attacker_card_instance_ids)
-    )
-    match.phase = MatchPhase.COMBAT
+    if match.combat is None:
+        return
+
+    for card_instance_id in action.attacker_card_instance_ids:
+        if match.combat.is_attacking(card_instance_id):
+            raise UnitAlreadyAttackingError(card_instance_id, match.match_id)
+
+
+def _send_to_the_attack_zone(match: Match, action: DeclareAttackAction) -> None:
+    """Abre a declaração, ou acrescenta à zona que já existe.
+
+    Um dos dois pontos deste módulo que escrevem o par `(combat, phase)`; o
+    outro é `_close_the_declaration`, e a saída da defesa é
+    `combat_cleanup._leave_combat`. É o argumento de `victory._finish_match`,
+    aplicado a uma transição que tem ida e volta.
+    """
+    chosen = list(action.attacker_card_instance_ids)
+
+    if match.combat is not None:
+        match.combat.attacker_card_instance_ids.extend(chosen)
+        return
+
+    match.combat = CombatState(attacker_card_instance_ids=chosen)
+    match.phase = MatchPhase.DECLARATION
+
+
+def _close_the_declaration(match: Match) -> None:
+    """Todos puxados de volta: a Fase de Ação, como se não tivesse declarado.
+
+    Não toca token, vez nem passes -- nada disso mudou ao declarar.
+    """
+    match.combat = None
+    match.phase = MatchPhase.ACTION

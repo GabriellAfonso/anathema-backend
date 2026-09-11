@@ -127,6 +127,7 @@ def test_acting_without_priority_is_refused_naming_who_has_it() -> None:
     [
         MatchPhase.MULLIGAN,
         MatchPhase.UPKEEP,
+        MatchPhase.DECLARATION,
         MatchPhase.COMBAT,
         MatchPhase.ROUND_END,
     ],

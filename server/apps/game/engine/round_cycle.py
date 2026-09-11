@@ -25,12 +25,14 @@ from apps.game.randomness import RandomSource
 from .blocker_pairing import assign_blocker, remove_blocker
 from .cast_spell import cast_spell
 from .combat_cleanup import end_combat
-from .declare_attack import declare_attack
+from .declare_attack import confirm_attack, declare_attack, withdraw_attacker
 from .play_unit import play_unit
 from .combat_action import (
     AssignBlockerAction,
+    ConfirmAttackAction,
     EndDefenseWindowAction,
     RemoveBlockerAction,
+    WithdrawAttackerAction,
 )
 from .player_action import (
     CastSpellAction,
@@ -143,6 +145,10 @@ def _apply_action(
             cast_spell(match, actor, action, catalog=catalog)
         case DeclareAttackAction():
             declare_attack(match, actor, action)
+        case WithdrawAttackerAction():
+            withdraw_attacker(match, action)
+        case ConfirmAttackAction():
+            confirm_attack(match)
         case AssignBlockerAction():
             assign_blocker(match, actor, action)
         case RemoveBlockerAction():
@@ -167,12 +173,12 @@ def _pass_priority(match: Match, action: PlayerAction) -> None:
     guarda comum já provou que os dois são o mesmo -- e este é um `int`, não um
     `int | None`.
 
-    O `return` são as duas exceções à alternância: jogar feitiço, que não gasta
-    a vez em fase nenhuma (§5B), e a janela do defensor, em que ele bloqueia e
-    desbloqueia quantas vezes quiser (§7.2). As exceções são propriedade **da
-    ação**, como `allowed_phases` já é, e é por isso que não vazam -- jogar
-    unidade, declarar ataque e passar declaram `keeps_priority = False` cada um
-    por si.
+    O `return` são as exceções à alternância: jogar feitiço, que não gasta a
+    vez em fase nenhuma (§5B), e as janelas do combate, em que o atacante monta
+    a zona de ataque (§7.1) e o defensor bloqueia (§7.2) quantas vezes quiserem.
+    As exceções são propriedade **da ação**, como `allowed_phases` já é, e é por
+    isso que não vazam -- jogar unidade, passar e confirmar o ataque declaram
+    `keeps_priority = False` cada um por si.
     """
     if action.keeps_priority:
         return
