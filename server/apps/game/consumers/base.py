@@ -226,15 +226,21 @@ class BaseConsumer(AsyncJsonWebsocketConsumer):
             }
         )
 
-    async def send_refusal(self, code: str, message: str) -> None:
+    async def send_refusal(self, code: str, message: str, **details: object) -> None:
         """Recusa uma mensagem, só para este socket, sem fechá-lo.
 
         `code` é o texto estável que o cliente compara; `message` é para gente.
-        O catálogo está em `apps/game/protocol/refusal_codes.py`.
+        O catálogo está em `apps/game/protocol/refusal_codes.py`, e o do socket
+        de matchmaking em `apps/game/protocol/matchmaking_refusals.py`.
+
+        `details` é opcional e serve à recusa que tem estrutura além do texto:
+        `invalid_deck` manda os problemas do deck por ele. O socket de partida
+        não passa nada, então os frames da feature 009 não mudam.
 
         >>> await self.send_refusal("unknown_message_type", "type 'x' ...")
+        >>> await self.send_refusal("invalid_deck", "...", deck_problems=[...])
         """
-        await self.send_error("message_refused", message, code=code)
+        await self.send_error("message_refused", message, code=code, **details)
 
     async def send_error(self, type: str, message: str, **extra: object) -> None:
         await self.send_event(

@@ -11,6 +11,7 @@ saem as respostas que ele precisa:
 - `match_events` e `match_frames` -- a mudança gravada vira o frame de cada
   jogador, montado para ele
 - `refusal_codes` -- toda recusa vira um código estável
+- `matchmaking_refusals` -- os códigos do socket de matchmaking (feature 011)
 
 `__all__` é explícito porque `mypy.ini` roda com `strict`, que liga
 `no_implicit_reexport`.
@@ -48,6 +49,11 @@ from .match_frames import (
     match_start_payload,
     match_update_payload,
     turn_warning_payload,
+)
+from .matchmaking_refusals import (
+    DECK_NOT_FOUND,
+    DECK_NOT_SPECIFIED,
+    INVALID_DECK,
 )
 from . import refusal_codes
 from .refusal_codes import (
@@ -119,6 +125,10 @@ __all__ = [
     "MALFORMED_MESSAGE",
     "UNKNOWN_MESSAGE_TYPE",
     "MATCH_NOT_FOUND",
+    # Recusas do socket de matchmaking (feature 011)
+    "DECK_NOT_SPECIFIED",
+    "DECK_NOT_FOUND",
+    "INVALID_DECK",
     "CONCURRENT_MATCH_WRITE",
     "INTERNAL_ERROR",
 ]

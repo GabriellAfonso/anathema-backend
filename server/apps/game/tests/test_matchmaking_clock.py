@@ -13,8 +13,9 @@ from typing import cast
 
 import pytest
 
-from apps.game.cards import mvp_catalog
+from apps.game.cards import get_card_catalog, starter_deck
 from apps.game.consumers.matchmaking import MatchmakingConsumer
+from apps.game.engine import MatchEntry
 from apps.game.match import Match
 from apps.game.match.store import MatchStore
 from apps.game.protocol import MULLIGAN_EXPIRY_MS
@@ -47,7 +48,7 @@ def consumer(matches: FakeMatchStore, clock: FakeWallClock) -> MatchmakingConsum
     """
     built = MatchmakingConsumer(
         matches=cast(MatchStore, matches),
-        catalog=mvp_catalog(),
+        catalog=get_card_catalog(),
         randomness=ScriptedRandomSource(),
         clock=clock,
     )
@@ -56,9 +57,21 @@ def consumer(matches: FakeMatchStore, clock: FakeWallClock) -> MatchmakingConsum
     return built
 
 
+def match_entry(user_id: int, nickname: str) -> MatchEntry:
+    """Perfil e deck juntos, como a fila os entrega desde a feature 011.
+
+    O deck é o derivado do catálogo: o que está sob teste aqui é o prazo do
+    mulligan, e uma lista específica não mudaria nada.
+    """
+    return MatchEntry(
+        profile=fake_player_data(user_id, nickname),
+        deck=starter_deck(get_card_catalog()),
+    )
+
+
 async def opened_match(matches: FakeMatchStore, clock: FakeWallClock) -> Match:
     await consumer(matches, clock).open_match(
-        fake_player_data(PLAYER_ONE, "one"), fake_player_data(PLAYER_TWO, "two")
+        match_entry(PLAYER_ONE, "one"), match_entry(PLAYER_TWO, "two")
     )
     saved = list(matches.matches.values())
     assert len(saved) == 1
