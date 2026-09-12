@@ -41,11 +41,18 @@ class AlwaysStaleMatchStore(MatchStore):
     """
 
     async def _swap_state(
-        self, match_id: str, version: bytes | str, match: Match
+        self,
+        match_id: str,
+        version: bytes | str,
+        match: Match,
+        *,
+        renews_expiry: bool = True,
     ) -> int:
         await self.save(match)
 
-        return await super()._swap_state(match_id, version, match)
+        return await super()._swap_state(
+            match_id, version, match, renews_expiry=renews_expiry
+        )
 
 
 @pytest.fixture
@@ -397,6 +404,36 @@ async def test_two_workers_closing_the_setup_at_once_reach_round_one(
     final = await stored_match(first_worker, match)
     assert (final.phase, final.round_number) == (MatchPhase.ACTION, 1)
     assert final.awaiting_mulligan_user_ids == ()
+
+
+async def test_a_clock_write_does_not_renew_the_expiry(
+    store: MatchStore, redis: Redis
+) -> None:
+    """§15: o estouro do relógio grava sem adiar a expiração da partida.
+
+    É o que faz uma partida em que ninguém joga sumir 6 horas depois da última
+    jogada **real**, em vez de os próprios estouros a manterem viva para sempre.
+    """
+    match = await saved_new_match(store)
+    key = f"test:match:{match.match_id}"
+    await redis.expire(key, 60)
+
+    await store.mutate(match.match_id, _bump_passes, renews_expiry=False)
+
+    assert 0 < await redis.ttl(key) <= 60
+
+
+async def test_a_player_write_renews_the_expiry(
+    store: MatchStore, redis: Redis
+) -> None:
+    """Jogada de cliente adia a expiração: partida em andamento não some."""
+    match = await saved_new_match(store)
+    key = f"test:match:{match.match_id}"
+    await redis.expire(key, 60)
+
+    await store.mutate(match.match_id, _bump_passes)
+
+    assert await redis.ttl(key) == MATCH_TTL_SECONDS
 
 
 def _bump_passes(live: Match) -> None:
