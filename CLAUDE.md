@@ -90,5 +90,5 @@ Decisions in force:
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/010-match-timers/plan.md`
+`specs/011-deck-catalog-api/plan.md`
 <!-- SPECKIT END -->
