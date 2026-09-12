@@ -53,6 +53,7 @@ from .effects import (
     SpellEffect,
     TargetKind,
 )
+from .client import get_card_catalog
 from .mvp_catalog import MVP_CARDS, MVP_SPELLS, MVP_UNITS, mvp_catalog
 from .starter_deck import starter_deck
 
@@ -84,6 +85,7 @@ __all__ = [
     "CardIdOutOfRangeError",
     # Cartas do MVP
     "mvp_catalog",
+    "get_card_catalog",
     "MVP_CARDS",
     "MVP_UNITS",
     "MVP_SPELLS",
