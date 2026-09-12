@@ -16,10 +16,9 @@ class TargetKind(StrEnum):
     NONE = "none"
     ALLIED_UNIT = "allied_unit"
     ENEMY_UNIT = "enemy_unit"
-    # Unidade aliada que está na zona de ataque da declaração (§7.1). Entrou com
-    # a regra própria do SACRIFICIAL FIRE (§14), na correção da nota de
-    # 2026-09-11.
-    ALLIED_ATTACKER = "allied_attacker"
+    # Houve um quarto, `ALLIED_ATTACKER`, entre as features 009 e 010: unidade
+    # aliada na zona de ataque, exigida por uma versão do SACRIFICIAL FIRE que a
+    # §14 não descreve. Com o FIRE sem alvo, ele ficou sem nenhum usuário.
 
 
 class EffectDuration(StrEnum):
@@ -129,21 +128,23 @@ class RestoreNexus(SpellEffectShape):
 
 @dataclass(frozen=True, slots=True)
 class SacrificeNexusForAttack(SpellEffectShape):
-    """O atacante paga Nexus, e uma unidade dele na zona de ataque ganha ataque.
+    """O atacante paga Nexus, e a zona de ataque dele inteira ganha ataque.
 
-    Regra própria da §14, corrigida em 2026-09-11: só na declaração de ataque,
-    só pelo atacante, com alvo numa unidade própria na zona de ataque, e o
-    Nexus nunca cai abaixo de 1. Até a correção valia em qualquer momento, sem
-    alvo, dava ataque a todas as unidades, e podia derrotar quem jogava.
+    Regra própria da §14: **sem alvo**, só na declaração de ataque, só pelo
+    atacante; todas as unidades dele que estão na zona naquele instante ganham o
+    bônus, e o Nexus nunca cai abaixo de 1.
+
+    Entre as features 009 e 010 o motor exigia alvo e buffava uma unidade só --
+    regra que a nota nunca descreveu, corrigida na 010.
 
     Efeito composto porque a troca é indivisível: o custo em Nexus não existe
     sem o buff, nem o buff sem o custo.
 
     >>> SacrificeNexusForAttack(nexus_cost=8, attack_bonus=3).target_kind
-    <TargetKind.ALLIED_ATTACKER: 'allied_attacker'>
+    <TargetKind.NONE: 'none'>
     """
 
-    target_kind: ClassVar[TargetKind] = TargetKind.ALLIED_ATTACKER
+    target_kind: ClassVar[TargetKind] = TargetKind.NONE
     duration: ClassVar[EffectDuration] = EffectDuration.PERMANENT
     declaration_only: ClassVar[bool] = True
 

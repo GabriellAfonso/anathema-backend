@@ -91,6 +91,16 @@ def test_no_spell_description_says_defesa() -> None:
         assert "defesa" not in spell.description.lower()
 
 
+def test_the_sacrificial_fire_description_names_the_whole_attack_zone() -> None:
+    """§14: o FIRE não tem alvo, e a descrição não pode oferecer uma mira que a
+    carta não tem."""
+    fire = mvp_catalog().card(CardId(1003))
+
+    assert isinstance(fire, Spell)
+    assert "zona de ataque" in fire.description
+    assert "alvo" not in fire.description.lower()
+
+
 def test_units_and_spells_sit_in_their_allocated_ranges() -> None:
     for unit in MVP_UNITS:
         assert UNIT_ID_MIN <= unit.card_id <= UNIT_ID_MAX

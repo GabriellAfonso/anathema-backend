@@ -157,14 +157,15 @@ def fire_on_an_attacker(
     match: Match, catalog: CardCatalog, source: RandomSource
 ) -> None:
     """O primeiro jogador declara com a primeira unidade, joga SACRIFICIAL FIRE
-    nela (§14) e a puxa de volta -- a partida volta à Fase de Ação com o bônus
-    na unidade, que a §13 registra como pergunta em aberto."""
+    sem alvo -- e ele buffa toda a zona de ataque (§14) -- e a puxa de volta: a
+    partida volta à Fase de Ação com o bônus na unidade, que a §13 registra como
+    pergunta em aberto."""
     one = match.players[0]
     attacker = bank_card(one)
 
     for action in (
         DeclareAttackAction(one.user_id, (attacker,)),
-        CastSpellAction(one.user_id, hand_card(one, SACRIFICIAL_FIRE), attacker),
+        CastSpellAction(one.user_id, hand_card(one, SACRIFICIAL_FIRE)),
         WithdrawAttackerAction(one.user_id, attacker),
     ):
         submit_action(match, action, catalog=catalog, randomness=source)

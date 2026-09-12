@@ -51,7 +51,7 @@ def test_every_spell_declares_target_and_duration() -> None:
     expected = {
         1001: (TargetKind.ALLIED_UNIT, EffectDuration.PERMANENT),
         1002: (TargetKind.ALLIED_UNIT, EffectDuration.PERMANENT),
-        1003: (TargetKind.ALLIED_ATTACKER, EffectDuration.PERMANENT),
+        1003: (TargetKind.NONE, EffectDuration.PERMANENT),
         1004: (TargetKind.NONE, EffectDuration.PERMANENT),
         1005: (TargetKind.ENEMY_UNIT, EffectDuration.PERMANENT),
     }
@@ -69,7 +69,7 @@ def test_every_spell_declares_target_and_duration() -> None:
 
 def test_requires_target_follows_the_target_kind() -> None:
     """Derivado de `target_kind`, nos dois sentidos."""
-    needs_target = {1001, 1002, 1003, 1005}
+    needs_target = {1001, 1002, 1005}
 
     for spell in MVP_SPELLS:
         assert spell.effect.requires_target == (spell.card_id in needs_target)

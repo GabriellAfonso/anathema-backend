@@ -41,7 +41,6 @@ from apps.game.match import (
     PlayerState,
 )
 
-from .blocker_pairing import UnitIsNotAttackingError
 from .player_action import (
     CastSpellAction,
     IllegalActionError,
@@ -308,7 +307,6 @@ def _target_on_the_right_side(
     owner_user_id = _owner_of(match, target_card_instance_id)
 
     if owner_user_id == _expected_owner(match, actor, expected):
-        _ensure_attacking_when_asked(match, target_card_instance_id, expected)
         return target
 
     raise WrongSpellTargetSideError(
@@ -335,28 +333,7 @@ def _owner_of(match: Match, target_card_instance_id: CardInstanceId) -> int | No
 def _expected_owner(match: Match, actor: PlayerState, expected: TargetKind) -> int:
     """De quem o alvo teria de ser. "Aliado" e "inimigo" são relativos a quem
     lança, e é aqui que essa relatividade vira um `user_id`."""
-    if expected in (TargetKind.ALLIED_UNIT, TargetKind.ALLIED_ATTACKER):
+    if expected is TargetKind.ALLIED_UNIT:
         return actor.user_id
 
     return match.opponent_of(actor.user_id).user_id
-
-
-def _ensure_attacking_when_asked(
-    match: Match, target_card_instance_id: CardInstanceId, expected: TargetKind
-) -> None:
-    """`ALLIED_ATTACKER` pede, além do lado, a unidade na zona de ataque (§14).
-
-    Só chega aqui na declaração -- a guarda de momento correu antes --, então o
-    combate existe.
-    """
-    if expected is not TargetKind.ALLIED_ATTACKER:
-        return
-
-    combat = match.ongoing_combat()
-
-    if not combat.is_attacking(target_card_instance_id):
-        raise UnitIsNotAttackingError(
-            target_card_instance_id,
-            list(combat.attacker_card_instance_ids),
-            match.match_id,
-        )

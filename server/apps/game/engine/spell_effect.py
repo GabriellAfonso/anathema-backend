@@ -114,9 +114,7 @@ def _dispatch(
         case RestoreNexus():
             change_nexus(match, caster, effect.amount)
         case SacrificeNexusForAttack():
-            _sacrifice_nexus_for_attack(
-                match, caster, _targeted(effect, target), effect
-            )
+            _sacrifice_nexus_for_attack(match, caster, effect)
         case _:
             assert_never(effect)
 
@@ -146,19 +144,40 @@ def _prevent_unit_damage(target: BankUnit, effect: PreventUnitDamage) -> None:
 
 
 def _sacrifice_nexus_for_attack(
-    match: Match, caster: PlayerState, target: BankUnit, effect: SacrificeNexusForAttack
+    match: Match, caster: PlayerState, effect: SacrificeNexusForAttack
 ) -> None:
-    """SACRIFICIAL FIRE (§14): a unidade alvo ganha ataque, e o lançador paga.
+    """SACRIFICIAL FIRE (§14): a zona de ataque inteira ganha ataque, e o
+    lançador paga.
+
+    Sem alvo. A zona é lida **neste instante**, e é só isso que faz uma unidade
+    mandada depois não ganhar nada -- não existe marca a guardar. Entre as
+    features 009 e 010 este braço pedia um alvo e buffava uma unidade só.
 
     O buff vem **antes** do custo, e a troca é indivisível: o custo não existe
     sem o buff. O custo nunca deixa o Nexus abaixo de 1 -- com Nexus 1, joga
     sem perder nada --, e por isso o FIRE não derrota ninguém (§10).
     """
-    target.modifiers.append(
-        AttackModifier(amount=effect.attack_bonus, duration=effect.duration)
-    )
+    for unit in _attacking_units(match):
+        unit.modifiers.append(
+            AttackModifier(amount=effect.attack_bonus, duration=effect.duration)
+        )
 
     change_nexus(match, caster, -_affordable_nexus_cost(caster, effect))
+
+
+def _attacking_units(match: Match) -> list[BankUnit]:
+    """As unidades que estão na zona de ataque agora (§7.1).
+
+    `ongoing_combat` não é leitura de fase disfarçada: a guarda de momento da
+    §14 já exigiu a Declaração antes de o efeito ser alcançado, então o combate
+    existe. Unidade que saiu de campo entre a declaração e o lançamento é
+    ignorada, pela mesma razão do bloqueador órfão da §7.3.
+    """
+    return [
+        unit
+        for card_instance_id in match.ongoing_combat().attacker_card_instance_ids
+        if (unit := match.bank_unit(card_instance_id)) is not None
+    ]
 
 
 def _affordable_nexus_cost(caster: PlayerState, effect: SacrificeNexusForAttack) -> int:

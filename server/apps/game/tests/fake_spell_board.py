@@ -18,6 +18,7 @@ from apps.game.cards import CardCatalog, CardId
 from apps.game.match import (
     BankUnit,
     CardInstanceId,
+    CombatState,
     Match,
     MatchCard,
     MatchPhase,
@@ -99,6 +100,35 @@ def bank_card(player: PlayerState, index: int = 0) -> CardInstanceId:
     return player.bank[index].card.card_instance_id
 
 
+def open_declaration(match: Match, *bank_indexes: int) -> CombatState:
+    """Põe a partida na Declaração (§7.1) com aquelas posições do banco do
+    primeiro jogador na zona de ataque.
+
+    Atalho de **estado**, como `declare_combat` de `fake_combat_board.py`, e
+    pela mesma razão: o que está sob teste em `test_spell_effect.py` é o efeito,
+    e passar pela ação da §5C faria uma falha dela reprovar um arquivo que não é
+    sobre ela.
+
+    Nada é consumido: a declaração é janela, quem consome o token é **Atacar**,
+    e a vez continua com o atacante.
+
+    >>> open_declaration(match, 0, 2).attacker_card_instance_ids
+    [3, 5]
+    """
+    attacker = match.players[0]
+
+    match.combat = CombatState(
+        attacker_card_instance_ids=[
+            bank_card(attacker, index) for index in bank_indexes
+        ]
+    )
+    match.phase = MatchPhase.DECLARATION
+    match.priority_user_id = attacker.user_id
+    match.consecutive_passes = 0
+
+    return match.combat
+
+
 def _fill_side(
     match: Match,
     player: PlayerState,
@@ -139,6 +169,7 @@ __all__ = [
     "STURDY_UNIT",
     "PLENTY_OF_ENERGY",
     "fake_spell_board",
+    "open_declaration",
     "hand_card",
     "bank_card",
 ]

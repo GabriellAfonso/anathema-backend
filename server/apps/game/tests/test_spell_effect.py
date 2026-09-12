@@ -48,6 +48,7 @@ from apps.game.tests.fake_spell_board import (
     SUMMONED_AX,
     TOUGH_UNIT,
     fake_spell_board,
+    open_declaration,
 )
 from apps.game.tests.match_snapshot import match_snapshot
 
@@ -217,68 +218,83 @@ def test_the_barrier_absorbs_one_ax_and_the_next_one_hits(
 # --------------------------------------------------------------------------
 
 
-def test_fire_costs_the_caster_eight_nexus(match: Match, catalog: CardCatalog) -> None:
+def firing_board(
+    catalog: CardCatalog,
+    *attacking: int,
+    bank_one: tuple[CardId, ...] = (TOUGH_UNIT,),
+) -> Match:
+    """Declaração aberta com aquelas posições do banco na zona de ataque.
+
+    O FIRE não tem alvo e lê a zona de ataque no instante do efeito (§14), então
+    este aplicador precisa de um combate em curso -- e a guarda de momento, que
+    não passa por aqui, já garantiu a Declaração.
+    """
+    match = fake_spell_board(catalog=catalog, bank_one=bank_one)
+    open_declaration(match, *attacking)
+
+    return match
+
+
+def test_fire_costs_the_caster_eight_nexus(catalog: CardCatalog) -> None:
+    match = firing_board(catalog, 0)
     one = match.players[0]
 
     apply_spell_effect(
-        match, one, effect_of(catalog, SACRIFICIAL_FIRE), one.bank[0], catalog=catalog
+        match, one, effect_of(catalog, SACRIFICIAL_FIRE), None, catalog=catalog
     )
 
     assert one.nexus == STARTING_NEXUS - 8
 
 
-def test_fire_gives_three_attack_to_the_target_only(catalog: CardCatalog) -> None:
-    """§14: uma unidade só -- até a correção de 2026-09-11 eram todas."""
-    match = fake_spell_board(
-        catalog=catalog, bank_one=(TOUGH_UNIT, FRAGILE_UNIT, TOUGH_UNIT)
-    )
+def test_fire_gives_three_attack_to_every_unit_in_the_attack_zone(
+    catalog: CardCatalog,
+) -> None:
+    """§14: todas as que estão na zona naquele instante, e só elas -- até a
+    correção de 2026-09-11 o motor pedia alvo e buffava uma."""
+    match = firing_board(catalog, 0, 2, bank_one=(TOUGH_UNIT, FRAGILE_UNIT, TOUGH_UNIT))
     one = match.players[0]
 
     apply_spell_effect(
-        match, one, effect_of(catalog, SACRIFICIAL_FIRE), one.bank[1], catalog=catalog
+        match, one, effect_of(catalog, SACRIFICIAL_FIRE), None, catalog=catalog
     )
 
-    assert [unit.modifiers for unit in one.bank] == [
-        [],
-        [AttackModifier(amount=3, duration=EffectDuration.PERMANENT)],
-        [],
-    ]
+    buffed = [AttackModifier(amount=3, duration=EffectDuration.PERMANENT)]
+    assert [unit.modifiers for unit in one.bank] == [buffed, [], buffed]
 
 
-def test_fire_leaves_the_opponent_units_alone(
-    match: Match, catalog: CardCatalog
-) -> None:
+def test_fire_leaves_the_opponent_units_alone(catalog: CardCatalog) -> None:
+    match = firing_board(catalog, 0)
     one, two = match.players
 
     apply_spell_effect(
-        match, one, effect_of(catalog, SACRIFICIAL_FIRE), one.bank[0], catalog=catalog
+        match, one, effect_of(catalog, SACRIFICIAL_FIRE), None, catalog=catalog
     )
 
     assert two.bank[0].modifiers == []
 
 
-def test_fire_never_leaves_the_nexus_below_one(
-    match: Match, catalog: CardCatalog
-) -> None:
+def test_fire_never_leaves_the_nexus_below_one(catalog: CardCatalog) -> None:
     """`nexus = max(nexus - 8, 1)` (§14)."""
+    match = firing_board(catalog, 0)
     one = match.players[0]
     one.nexus = 5
 
     apply_spell_effect(
-        match, one, effect_of(catalog, SACRIFICIAL_FIRE), one.bank[0], catalog=catalog
+        match, one, effect_of(catalog, SACRIFICIAL_FIRE), None, catalog=catalog
     )
 
     assert one.nexus == 1
 
 
 def test_fire_with_nexus_one_costs_nothing_and_still_buffs(
-    match: Match, catalog: CardCatalog
+    catalog: CardCatalog,
 ) -> None:
+    match = firing_board(catalog, 0)
     one = match.players[0]
     one.nexus = 1
 
     apply_spell_effect(
-        match, one, effect_of(catalog, SACRIFICIAL_FIRE), one.bank[0], catalog=catalog
+        match, one, effect_of(catalog, SACRIFICIAL_FIRE), None, catalog=catalog
     )
 
     assert one.nexus == 1
@@ -287,17 +303,18 @@ def test_fire_with_nexus_one_costs_nothing_and_still_buffs(
     ]
 
 
-def test_fire_never_ends_the_match(match: Match, catalog: CardCatalog) -> None:
+def test_fire_never_ends_the_match(catalog: CardCatalog) -> None:
     """Nenhum feitiço derrota ninguém (§10): com 8 de Nexus, sobra 1."""
+    match = firing_board(catalog, 0)
     one = match.players[0]
     one.nexus = 8
 
     apply_spell_effect(
-        match, one, effect_of(catalog, SACRIFICIAL_FIRE), one.bank[0], catalog=catalog
+        match, one, effect_of(catalog, SACRIFICIAL_FIRE), None, catalog=catalog
     )
 
     assert (one.nexus, match.is_over) == (1, False)
-    assert match.phase is MatchPhase.ACTION
+    assert match.phase is MatchPhase.DECLARATION
 
 
 # --------------------------------------------------------------------------
@@ -514,17 +531,19 @@ def test_a_refused_effect_changes_nothing(match: Match, catalog: CardCatalog) ->
     assert match_snapshot(match) == before
 
 
-def test_every_mvp_effect_has_an_arm(match: Match, catalog: CardCatalog) -> None:
+def test_every_mvp_effect_has_an_arm(catalog: CardCatalog) -> None:
     """Os cinco despacham; nenhum cai no `assert_never`.
 
     A exaustividade em si é erro de mypy, não de runtime -- este teste só
-    garante que os cinco do catálogo passam pelo despacho sem levantar.
+    garante que os cinco do catálogo passam pelo despacho sem levantar. A
+    declaração aberta é o que o FIRE precisa, e os outros quatro não notam.
     """
+    match = firing_board(catalog, 0)
     one, two = match.players
     targets = {
         SOMEONES_SHIELD: one.bank[0],
         MAGIC_BARRIER: one.bank[0],
-        SACRIFICIAL_FIRE: one.bank[0],
+        SACRIFICIAL_FIRE: None,
         LIFE_POTION: None,
         SUMMONED_AX: two.bank[0],
     }
