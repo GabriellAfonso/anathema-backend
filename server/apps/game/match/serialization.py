@@ -12,6 +12,7 @@ dano acumulado, modificadores e o pareamento de bloqueadores da §7.2 inclusive.
 
 from apps.game.cards import CardId, EffectDuration
 from apps.game.randomness import RandomSeed
+from apps.game.wall_clock import EpochMillis
 
 from .cards_in_play import BankUnit, CardInstanceId, MatchCard
 from .combat_state import BlockAssignment, CombatState
@@ -20,11 +21,14 @@ from .documents import (
     BlockAssignmentDocument,
     CardDocument,
     CombatDocument,
+    MatchClockDocument,
     MatchDocument,
     MatchOutcomeDocument,
     ModifierDocument,
     PlayerDocument,
+    TurnDeadlineDocument,
 )
+from .match_clock import MatchClock, TurnDeadline
 from .match_outcome import MatchEndReason, MatchOutcome
 from .match_state import Match, MatchPhase
 from .modifiers import (
@@ -54,6 +58,7 @@ def to_match_document(match: Match) -> MatchDocument:
         "outcome": to_match_outcome_document(match.outcome),
         "combat": to_combat_document(match.combat),
         "consecutive_passes": match.consecutive_passes,
+        "clock": to_match_clock_document(match.clock),
         "next_card_instance_id": match.next_card_instance_id,
         "random_seed": match.random_seed,
         "next_roll_ordinal": match.next_roll_ordinal,
@@ -79,6 +84,7 @@ def match_from_document(document: MatchDocument) -> Match:
         outcome=match_outcome_from_document(document["outcome"]),
         combat=combat_from_document(document["combat"]),
         consecutive_passes=document["consecutive_passes"],
+        clock=match_clock_from_document(document["clock"]),
         next_card_instance_id=document["next_card_instance_id"],
         random_seed=RandomSeed(document["random_seed"]),
         next_roll_ordinal=document["next_roll_ordinal"],
@@ -207,6 +213,58 @@ def block_assignment_from_document(
     return BlockAssignment(
         blocker_card_instance_id=CardInstanceId(document["blocker_card_instance_id"]),
         attacker_card_instance_id=CardInstanceId(document["attacker_card_instance_id"]),
+    )
+
+
+def to_match_clock_document(clock: MatchClock) -> MatchClockDocument:
+    """Os prazos da §15. Instante é `int` nos dois lados; a volta reembrulha em
+    `EpochMillis`, como `CardId` e `RandomSeed` já fazem."""
+    return {
+        "turn": to_turn_deadline_document(clock.turn),
+        "mulligan_expires_at_ms": clock.mulligan_expires_at_ms,
+    }
+
+
+def match_clock_from_document(document: MatchClockDocument) -> MatchClock:
+    mulligan = document["mulligan_expires_at_ms"]
+
+    return MatchClock(
+        turn=turn_deadline_from_document(document["turn"]),
+        mulligan_expires_at_ms=None if mulligan is None else EpochMillis(mulligan),
+    )
+
+
+def to_turn_deadline_document(
+    turn: TurnDeadline | None,
+) -> TurnDeadlineDocument | None:
+    """`None` atravessa como `None`: partida no mulligan ou terminada não tem
+    vez. Mesma forma de `to_combat_document`, e pela mesma razão."""
+    if turn is None:
+        return None
+
+    return {
+        "turn_number": turn.turn_number,
+        "holder_user_id": turn.holder_user_id,
+        "round_number": turn.round_number,
+        "warns_at_ms": turn.warns_at_ms,
+        "expires_at_ms": turn.expires_at_ms,
+        "warning_sent": turn.warning_sent,
+    }
+
+
+def turn_deadline_from_document(
+    document: TurnDeadlineDocument | None,
+) -> TurnDeadline | None:
+    if document is None:
+        return None
+
+    return TurnDeadline(
+        turn_number=document["turn_number"],
+        holder_user_id=document["holder_user_id"],
+        round_number=document["round_number"],
+        warns_at_ms=EpochMillis(document["warns_at_ms"]),
+        expires_at_ms=EpochMillis(document["expires_at_ms"]),
+        warning_sent=document["warning_sent"],
     )
 
 

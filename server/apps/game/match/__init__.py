@@ -21,11 +21,14 @@ from .documents import (
     BlockAssignmentDocument,
     CardDocument,
     CombatDocument,
+    MatchClockDocument,
     MatchDocument,
     MatchOutcomeDocument,
     ModifierDocument,
     PlayerDocument,
+    TurnDeadlineDocument,
 )
+from .match_clock import IDLE_MATCH_CLOCK, MatchClock, TurnDeadline, clock_wake_at
 from .match_outcome import MatchEndReason, MatchOutcome
 from .match_state import (
     Match,
@@ -49,9 +52,11 @@ from .player_view import (
 )
 from .serialization import (
     combat_from_document,
+    match_clock_from_document,
     match_from_document,
     match_outcome_from_document,
     to_combat_document,
+    to_match_clock_document,
     to_match_document,
     to_match_outcome_document,
 )
@@ -80,6 +85,11 @@ __all__ = [
     # Desfecho da partida (§10)
     "MatchOutcome",
     "MatchEndReason",
+    # Prazos do relógio da vez (§15) -- estado de transporte, nunca regra
+    "TurnDeadline",
+    "MatchClock",
+    "IDLE_MATCH_CLOCK",
+    "clock_wake_at",
     # Forma gravada
     "CardDocument",
     "ModifierDocument",
@@ -88,6 +98,8 @@ __all__ = [
     "CombatDocument",
     "PlayerDocument",
     "MatchOutcomeDocument",
+    "TurnDeadlineDocument",
+    "MatchClockDocument",
     "MatchDocument",
     "to_match_document",
     "match_from_document",
@@ -95,6 +107,8 @@ __all__ = [
     "match_outcome_from_document",
     "to_combat_document",
     "combat_from_document",
+    "to_match_clock_document",
+    "match_clock_from_document",
     # Visão do jogador
     "PlayerSideView",
     "OpponentSideView",

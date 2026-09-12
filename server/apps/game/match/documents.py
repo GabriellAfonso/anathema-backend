@@ -65,6 +65,30 @@ class BankUnitDocument(TypedDict):
     modifiers: list[ModifierDocument]
 
 
+class TurnDeadlineDocument(TypedDict):
+    """A vez e os dois instantes dela (§15), em milissegundos da época."""
+
+    turn_number: int
+    holder_user_id: int
+    round_number: int
+    warns_at_ms: int
+    expires_at_ms: int
+    warning_sent: bool
+
+
+class MatchClockDocument(TypedDict):
+    """Os prazos da partida. `turn` e `mulligan_expires_at_ms` nunca valem ao
+    mesmo tempo, e os dois `None` é partida sem prazo -- antes de o mulligan ser
+    armado, e depois do fim.
+
+    Obrigatório e anulável campo a campo, e não ausente: `total=False` tornaria
+    **todo** o documento opcional, que é o argumento que `outcome` já usou.
+    """
+
+    turn: TurnDeadlineDocument | None
+    mulligan_expires_at_ms: int | None
+
+
 class MatchOutcomeDocument(TypedDict):
     """Quem perdeu, e por quê (§10). O motivo atravessa como string, e a volta
     reembrulha no enum -- como `phase` já faz."""
@@ -129,6 +153,9 @@ class MatchDocument(TypedDict):
     # já usou.
     combat: CombatDocument | None
     consecutive_passes: int
+    # Os prazos da §15. Estado de transporte, gravado junto do resto para
+    # atravessar os workers numa escrita só.
+    clock: MatchClockDocument
     next_card_instance_id: int
     # `RandomSeed` é `str` em tempo de execução; a volta reembrulha, como
     # `CardId` e `CardInstanceId` já fazem.

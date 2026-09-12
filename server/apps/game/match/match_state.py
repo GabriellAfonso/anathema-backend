@@ -17,6 +17,7 @@ from apps.game.randomness import RandomSeed, Roll
 
 from .cards_in_play import BankUnit, CardInstanceId
 from .combat_state import CombatState
+from .match_clock import IDLE_MATCH_CLOCK, MatchClock
 from .match_outcome import MatchOutcome
 from .player_state import PlayerState
 
@@ -156,6 +157,12 @@ class Match:
     # abre um fluxo próprio a partir de `(random_seed, ordinal)`, então quantos
     # números uma operação consome não afeta a seguinte.
     next_roll_ordinal: int = 1
+    # Os prazos da §15. Estado de **transporte**: nenhuma regra o lê, nenhuma
+    # porta do motor o escreve, e `start_match` nem sabe que ele existe -- quem
+    # o arma é `protocol/turn_clock.py`, dentro da mesma mutação gravada. Mora
+    # aqui, e não numa chave à parte, porque o prazo precisa atravessar os
+    # workers junto do estado a que pertence, numa escrita só.
+    clock: MatchClock = IDLE_MATCH_CLOCK
 
     def mint_roll(self) -> Roll:
         """Cunha o próximo sorteio desta partida.
