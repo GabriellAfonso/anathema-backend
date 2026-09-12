@@ -1,9 +1,13 @@
-"""Deck de andaime: 40 identificadores válidos derivados do catálogo.
+"""O conteúdo do deck inicial: 40 identificadores válidos, do catálogo.
 
-Andaime, não conteúdo. O matchmaking precisa entregar um deck para cada
-jogador hoje, e a origem de verdade -- deck montado pelo jogador e guardado em
-banco -- é outra feature. Quando ela entrar, esta função sai; nada aqui é
-escolha de balanceamento e nada aqui é contrato.
+Até a feature 011 isto era andaime -- o matchmaking entregava esta mesma lista
+a todo jogador, porque deck de jogador ainda não existia. Agora o deck vem do
+jogador, e esta função ficou como a lista com que ele nasce: o deck que
+`apps.players.services.starter_deck_creation` cria junto com o perfil.
+
+Continua não sendo escolha de balanceamento e continua não sendo contrato. O
+deck inicial é comum -- editável e apagável --, e mudar esta lista muda só com
+o que contas novas começam.
 
 Deriva do catálogo injetado em vez de listar 40 números à mão para que continue
 válido quando o catálogo mudar, e para que o teste prove a validade em vez de
