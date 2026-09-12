@@ -9,9 +9,10 @@ services:
         # rodam dentro do container sem que a imagem de produção os carregue.
         INSTALL_DEV: "true"
     # Dev-only override of the image's production CMD.
+    # `--lifespan on` liga o relógio da vez (§15) junto com o worker.
     command: [ "uvicorn", "core.asgi:application",
                "--host", "0.0.0.0", "--port", "8000",
-               "--lifespan", "off", "--reload" ]
+               "--lifespan", "on", "--reload" ]
     ports:
       - "8000:8000"
     volumes:

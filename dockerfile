@@ -31,8 +31,9 @@ ENV PATH="/venv/bin:${PATH}"
 
 # Production default: the image runs prod unless something overrides it, so a
 # forgotten override fails safe. Dev opts into --reload via compose command:.
-# --lifespan off: Channels' ProtocolTypeRouter maps only http/websocket,
-# so the lifespan scope raises ValueError. No startup hooks to run anyway.
+# --lifespan on: o ProtocolTypeRouter passou a mapear o escopo `lifespan`, e é
+# ele que liga o relógio da vez (§15) em cada worker. Com `off`, uma partida
+# parada nunca estoura.
 CMD ["uvicorn", "core.asgi:application", \
      "--host", "0.0.0.0", "--port", "8000", \
-     "--lifespan", "off", "--workers", "4"]
+     "--lifespan", "on", "--workers", "4"]
