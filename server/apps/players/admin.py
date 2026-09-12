@@ -2,6 +2,7 @@ from django.contrib import admin
 
 # Register your models here.
 from django.contrib import admin
+from apps.players.models.deck import PlayerDeck
 from apps.players.models.player import PlayerProfile, PlayerStats, LoginHistory
 from apps.players.models.settings import PlayerSettings
 
@@ -31,3 +32,8 @@ class LoginHistoryAdmin(admin.ModelAdmin): ...
 
 @admin.register(PlayerSettings)
 class PlayerSettingsAdmin(admin.ModelAdmin): ...
+
+
+@admin.register(PlayerDeck)
+class PlayerDeckAdmin(admin.ModelAdmin):
+    list_display = ("name", "profile", "updated_at")
