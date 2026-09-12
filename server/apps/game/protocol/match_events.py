@@ -15,6 +15,7 @@ contagem para os dois. Toda carta citada por inteiro está no banco ou no
 cemitério no momento do evento, e portanto já é pública.
 """
 
+from dataclasses import dataclass
 from typing import Literal, TypedDict, assert_never
 
 from apps.game.engine import (
@@ -38,7 +39,25 @@ from apps.game.match import (
 )
 from apps.game.match.serialization import to_card_document
 
+from .clock_events import ClockExpiry, MulliganExpiry, TurnExpiry
 from .commands import ClientCommand, ForfeitCommand, MulliganCommand
+
+
+class TurnTimedOutEvent(TypedDict):
+    """O relógio da vez estourou (§15). Vem antes da jogada automática, e é o
+    que deixa o cliente distinguir "o oponente passou" de "o tempo dele
+    acabou"."""
+
+    kind: Literal["turn_timed_out"]
+    user_id: int
+    turn_number: int
+
+
+class MulliganTimedOutEvent(TypedDict):
+    """O prazo do mulligan daquele jogador venceu (§15)."""
+
+    kind: Literal["mulligan_timed_out"]
+    user_id: int
 
 
 class MulliganTakenEvent(TypedDict):
@@ -159,6 +178,8 @@ PlayEvent = (
 )
 MatchEvent = (
     PlayEvent
+    | TurnTimedOutEvent
+    | MulliganTimedOutEvent
     | UnitDamagedEvent
     | UnitDiedEvent
     | NexusChangedEvent
@@ -174,6 +195,54 @@ CombatCommand = (
     | RemoveBlockerAction
     | EndDefenseWindowAction
 )
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerOrigin:
+    """A mudança veio de uma mensagem de socket. Sem campo: quem agiu já está
+    no comando."""
+
+
+@dataclass(frozen=True, slots=True)
+class ClockOrigin:
+    """A mudança veio do relógio (§15)."""
+
+    event: ClockExpiry
+
+
+# União fechada: a origem da mudança gravada, que decide se a lista de eventos
+# começa com a marca do relógio.
+ChangeOrigin = PlayerOrigin | ClockOrigin
+
+
+def origin_events(origin: ChangeOrigin) -> list[MatchEvent]:
+    """A marca do relógio, ou nada.
+
+    Jogada de socket continua produzindo exatamente a lista de sempre: é por
+    isso que a origem é um evento a mais no começo, e não um campo novo em cada
+    evento (FR-018).
+
+    >>> origin_events(PlayerOrigin())
+    []
+    """
+    if isinstance(origin, PlayerOrigin):
+        return []
+
+    return [_timed_out_event(origin.event)]
+
+
+def _timed_out_event(event: ClockExpiry) -> MatchEvent:
+    match event:
+        case TurnExpiry():
+            return {
+                "kind": "turn_timed_out",
+                "user_id": event.holder_user_id,
+                "turn_number": event.turn_number,
+            }
+        case MulliganExpiry():
+            return {"kind": "mulligan_timed_out", "user_id": event.user_id}
+        case _:
+            assert_never(event)
 
 
 def describe_change(

@@ -1,11 +1,8 @@
 import json
 import logging
-from copy import deepcopy
-from typing import TypedDict
 from urllib.parse import parse_qs
 
 from apps.game.cards import CardCatalog, mvp_catalog
-from apps.game.match import Match
 from apps.game.match.client import get_match_store
 from apps.game.match.store import (
     ConcurrentMatchWriteError,
@@ -16,17 +13,24 @@ from apps.game.match.store import (
 from apps.game.protocol import (
     ClientCommand,
     MalformedMessageError,
-    MatchUpdatePayload,
-    apply_command,
+    PlayerChange,
+    PlayerOrigin,
     match_start_payload,
-    match_update_payload,
     parse_client_message,
     refusal_codes,
     refusal_for,
 )
 from apps.game.randomness import RandomSource, SeededRandomSource
+from apps.game.wall_clock import SystemWallClock, WallClock
 
 from .base import BaseConsumer
+from .match_delivery import (
+    MATCH_GROUP_PREFIX,
+    MatchUpdateMessage,
+    TurnWarningMessage,
+    deliver_match_update,
+    match_user_group,
+)
 
 # Close codes in the private 4000-4999 range, mirroring HTTP: 4001 is the auth
 # gate in BaseConsumer, so the match gate continues the 44xx series.
@@ -37,58 +41,8 @@ MATCH_NOT_FOUND = 4404
 logger = logging.getLogger(__name__)
 
 
-class MatchUpdateMessage(TypedDict):
-    """Mensagem de channel layer que leva o frame **já montado** para um jogador.
-
-    Vai ao grupo de usuário dele, nunca ao grupo da partida: o payload contém a
-    mão do destinatário. `match_id` deixa o socket de outra partida do mesmo
-    usuário ignorá-la.
-    """
-
-    type: str
-    match_id: str
-    payload: MatchUpdatePayload
-
-
-class RecordedChange:
-    """A mutação do comando, e a partida de antes da tentativa que valeu.
-
-    `MatchStore.mutate` pode reaplicar a mudança sobre uma leitura fresca quando
-    outro worker escreveu no meio. Cada tentativa sobrescreve `before`, então o
-    que sobra quando `mutate` devolve é o antes da tentativa gravada -- e é dele
-    que a descrição do que aconteceu precisa (FR-037).
-    """
-
-    def __init__(
-        self, command: ClientCommand, catalog: CardCatalog, randomness: RandomSource
-    ) -> None:
-        self.command = command
-        self.catalog = catalog
-        self.randomness = randomness
-        self.before: Match | None = None
-
-    def recorded_before(self) -> Match:
-        """A partida de antes da tentativa gravada.
-
-        Recusa nomeada em vez de `assert` -- que some com `-O` -- para o caso
-        impossível de `mutate` devolver sem ter chamado a mudança.
-        """
-        if self.before is None:
-            raise RuntimeError(
-                f"no state recorded for {self.command!r}: expected mutate to run the change"
-            )
-
-        return self.before
-
-    def __call__(self, match: Match) -> None:
-        self.before = deepcopy(match)
-        apply_command(
-            match, self.command, catalog=self.catalog, randomness=self.randomness
-        )
-
-
 class MatchConsumer(BaseConsumer):
-    group_prefix = "match"
+    group_prefix = MATCH_GROUP_PREFIX
 
     match_id: str | None = None
 
@@ -98,15 +52,17 @@ class MatchConsumer(BaseConsumer):
         matches: MatchStore | None = None,
         catalog: CardCatalog | None = None,
         randomness: RandomSource | None = None,
+        clock: WallClock | None = None,
         **kwargs: object,
     ) -> None:
         super().__init__(*args, **kwargs)
         # Channels passes as_asgi(**initkwargs) through to __init__, so tests
-        # wire all three with MatchConsumer.as_asgi(matches=..., catalog=...,
-        # randomness=...).
+        # wire all four with MatchConsumer.as_asgi(matches=..., catalog=...,
+        # randomness=..., clock=...).
         self.matches = matches or get_match_store()
         self.catalog = catalog or mvp_catalog()
         self.randomness = randomness or SeededRandomSource()
+        self.clock = clock or SystemWallClock()
 
     async def on_connect(self) -> None:
         """Só deixa entrar quem joga a partida pedida."""
@@ -162,6 +118,19 @@ class MatchConsumer(BaseConsumer):
         )
 
     @classmethod
+    def user_group(cls, user_id: int) -> str:
+        """O grupo de usuário deste socket, na fórmula de `match_delivery`.
+
+        Sobrescreve o do `BaseConsumer` para que exista **uma** fórmula deste
+        endereço: o ticker do relógio (§15) entrega ao mesmo grupo e não tem
+        consumer de onde chamá-la.
+
+        >>> MatchConsumer.user_group(7)
+        'match.user.7'
+        """
+        return match_user_group(user_id)
+
+    @classmethod
     def match_group(cls, match_id: str) -> str:
         """Grupo que endereça todos os sockets de uma mesma partida.
 
@@ -181,12 +150,16 @@ class MatchConsumer(BaseConsumer):
         É isto que torna a reconexão possível: reconectar é literalmente
         conectar de novo, e o estado chega no mesmo frame de sempre. A versão
         deixa o cliente descartar uma atualização em trânsito que seja mais
-        velha que este estado. O `MatchStore` guarda a partida no Redis por 6h,
-        então ela sobrevive à queda.
+        velha que este estado, e o relógio chega como tempo restante medido
+        agora -- quem reconecta no meio da vez vê o que falta de verdade. O
+        `MatchStore` guarda a partida no Redis por 6h, então ela sobrevive à
+        queda.
         """
         await self.send_event(
             type="match_start",
-            payload=match_start_payload(stored.match, stored.version, self.user_id),
+            payload=match_start_payload(
+                stored.match, stored.version, self.user_id, self.clock.now_ms()
+            ),
         )
 
     async def receive_json(self, content: dict[str, object], **kwargs: object) -> None:
@@ -214,7 +187,12 @@ class MatchConsumer(BaseConsumer):
 
         Toda falha vira recusa só para este socket, e nenhuma fecha a conexão.
         """
-        change = RecordedChange(command, self.catalog, self.randomness)
+        change = PlayerChange(
+            command,
+            catalog=self.catalog,
+            randomness=self.randomness,
+            clock=self.clock,
+        )
 
         try:
             stored = await self.matches.mutate(match_id, change)
@@ -222,7 +200,14 @@ class MatchConsumer(BaseConsumer):
             await self.refuse_failure(failure, match_id, content)
             return
 
-        await self.broadcast_update(change.recorded_before(), stored, command)
+        await deliver_match_update(
+            self.channel_layer,
+            change.recorded_before(),
+            stored,
+            command,
+            origin=PlayerOrigin(),
+            now=self.clock.now_ms(),
+        )
 
     async def refuse_failure(
         self, failure: Exception, match_id: str, content: dict[str, object]
@@ -270,27 +255,6 @@ class MatchConsumer(BaseConsumer):
             exc_info=failure,
         )
 
-    async def broadcast_update(
-        self, before: Match, stored: StoredMatch, command: ClientCommand
-    ) -> None:
-        """Um frame por jogador, montado para ele, ao grupo de usuário dele.
-
-        Nunca ao grupo da partida: o frame de um contém a mão dele. Todo socket
-        do jogador naquela partida recebe, inclusive o que mandou -- a
-        atualização é a confirmação da jogada.
-        """
-        for player in stored.match.players:
-            message: MatchUpdateMessage = {
-                "type": "match.update",
-                "match_id": stored.match.match_id,
-                "payload": match_update_payload(
-                    before, stored.match, stored.version, command, player.user_id
-                ),
-            }
-            await self.channel_layer.group_send(
-                self.user_group(player.user_id), message
-            )
-
     async def match_update(self, message: MatchUpdateMessage) -> None:
         """Channel-layer handler: encaminha a atualização desta partida.
 
@@ -301,6 +265,16 @@ class MatchConsumer(BaseConsumer):
             return
 
         await self.send_event(type="match_update", payload=message["payload"])
+
+    async def match_turn_warning(self, message: TurnWarningMessage) -> None:
+        """Channel-layer handler: o aviso dos 30s desta partida (§15).
+
+        Mesma conferência de `match_id` do `match_update`, e pela mesma razão.
+        """
+        if message["match_id"] != self.match_id:
+            return
+
+        await self.send_event(type="turn_warning", payload=message["payload"])
 
     def get_match_id(self) -> str | None:
         query_string: str = self.scope["query_string"].decode()

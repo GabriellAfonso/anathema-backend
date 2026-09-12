@@ -17,17 +17,29 @@ from apps.game.tests.fake_match_store import FakeMatchStore
 from apps.game.tests.fake_random_source import ScriptedRandomSource
 from apps.game.tests.fake_users import FakePlayerUser
 from apps.game.tests.websocket_test_client import WebsocketTestClient
+from apps.game.wall_clock import WallClock
 
 Frame = dict[str, object]
 
 
 async def open_match_socket(
-    matches: FakeMatchStore, user_id: int, match_id: str
+    matches: FakeMatchStore,
+    user_id: int,
+    match_id: str,
+    *,
+    clock: WallClock | None = None,
 ) -> tuple[WebsocketTestClient, Frame]:
-    """Conecta o jogador e devolve o socket com o `match_start` que chegou."""
+    """Conecta o jogador e devolve o socket com o `match_start` que chegou.
+
+    `clock` é o mesmo relógio falso do teste quando o cenário fala de prazo: o
+    socket mede o tempo restante com ele, como o ticker mede.
+    """
     client = WebsocketTestClient(
         MatchConsumer.as_asgi(
-            matches=matches, catalog=mvp_catalog(), randomness=ScriptedRandomSource()
+            matches=matches,
+            catalog=mvp_catalog(),
+            randomness=ScriptedRandomSource(),
+            clock=clock,
         ),
         "/ws/match/",
         query_string=f"matchId={match_id}",
@@ -71,6 +83,14 @@ async def next_update(client: WebsocketTestClient) -> Frame:
     return payload_of(frame)
 
 
+async def next_turn_warning(client: WebsocketTestClient) -> Frame:
+    """O próximo aviso dos 30s deste socket; falha se chegou outra coisa."""
+    frame = await client.receive_json_from()
+    assert frame["type"] == "turn_warning", frame
+
+    return payload_of(frame)
+
+
 async def next_refusal_code(client: WebsocketTestClient) -> str:
     """O código da próxima recusa deste socket; falha se chegou outra coisa."""
     frame = await client.receive_json_from()
@@ -104,6 +124,7 @@ __all__ = [
     "side_of",
     "event_kinds",
     "next_update",
+    "next_turn_warning",
     "next_refusal_code",
     "message_for",
 ]
