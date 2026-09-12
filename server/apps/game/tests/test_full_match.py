@@ -14,17 +14,16 @@ motor, não a estratégia.
 
 O deck não é o de andaime: aquele pega as cartas em ordem de `card_id` e fecha
 40 só com unidades, então uma partida com ele nunca joga feitiço. Este tem os
-feitiços do MVP menos o SACRIFICIAL FIRE, que a §14 da nota (corrigida em
-2026-09-11) restringe à declaração de ataque. O laço de feitiços de uma vez
-termina porque todo feitiço do MVP custa pelo menos 2 de energia.
+feitiços do MVP menos o SACRIFICIAL FIRE, que a §14 restringe à declaração de
+ataque -- este jogador declara e confirma **Atacar** na mesma vez, e não guarda
+energia para lançá-lo lá. O laço de feitiços de uma vez termina porque todo
+feitiço do MVP custa pelo menos 2 de energia.
 
 O segundo teste é o que vale mais a longo prazo:
 `test_no_automatic_phase_is_ever_observed`. Nenhuma chamada pode devolver a
 partida em `UPKEEP` ou `ROUND_END` — é a promessa de
 `submit_action` desde a feature 005, agora com o combate dentro dela.
 """
-
-from pathlib import Path
 
 import pytest
 
@@ -57,6 +56,7 @@ from apps.game.match import (
     PlayerState,
 )
 from apps.game.randomness import RandomSource
+from apps.game.tests.engine_sources import engine_sources
 from apps.game.tests.fake_random_source import ScriptedRandomSource
 from apps.game.tests.fake_setup import fake_match_in_action_phase
 
@@ -69,7 +69,7 @@ PLAYER_TWO = 9
 MAX_ACTIONS = 2000
 
 # Os feitiços do MVP que o jogador automático joga -- todos menos o SACRIFICIAL
-# FIRE (1003), que pela §14 só vale na declaração de ataque.
+# FIRE (1003), que pela §14 só vale na declaração de ataque e não tem alvo.
 SCRIPTED_SPELLS = (CardId(1001), CardId(1002), CardId(1004), CardId(1005))
 DECK_SIZE = 40
 COPIES = 3
@@ -350,7 +350,7 @@ def test_the_engine_imports_no_transport_and_no_persistence() -> None:
     """
     offenders = [
         (path.name, line)
-        for path in _engine_sources()
+        for path in engine_sources()
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.startswith(("import ", "from "))
         and any(forbidden in line for forbidden in FORBIDDEN_IMPORTS)
@@ -363,16 +363,10 @@ def test_the_engine_never_reaches_for_the_store() -> None:
     """Nem por dentro do próprio `apps.game`: gravar é do chamador."""
     offenders = [
         (path.name, line)
-        for path in _engine_sources()
+        for path in engine_sources()
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.startswith(("import ", "from "))
         and ("match.store" in line or "consumers" in line)
     ]
 
     assert offenders == []
-
-
-def _engine_sources() -> list[Path]:
-    root = Path(__file__).resolve().parent.parent
-
-    return sorted((root / "engine").glob("*.py"))
