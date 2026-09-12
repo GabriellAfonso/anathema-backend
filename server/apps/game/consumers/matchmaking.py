@@ -5,11 +5,13 @@ from apps.game.match.client import get_match_store
 from apps.game.match.store import MatchStore
 from apps.game.matchmaking.client import get_matchmaking_queue
 from apps.game.matchmaking.queue import MatchmakingQueue
+from apps.game.protocol import opening_match_clock
 from apps.game.randomness import (
     RandomSource,
     SeededRandomSource,
     new_random_seed,
 )
+from apps.game.wall_clock import SystemWallClock, WallClock
 from apps.players.services.player_queries import PlayerData, get_player_public_data
 
 from .base import BaseConsumer, ClientEventMessage
@@ -25,12 +27,13 @@ class MatchmakingConsumer(BaseConsumer):
         matches: MatchStore | None = None,
         catalog: CardCatalog | None = None,
         randomness: RandomSource | None = None,
+        clock: WallClock | None = None,
         **kwargs: object,
     ) -> None:
         super().__init__(*args, **kwargs)
         # Channels passes as_asgi(**initkwargs) through to __init__, so tests
-        # wire all four with MatchmakingConsumer.as_asgi(queue=..., matches=...,
-        # catalog=..., randomness=...).
+        # wire all five with MatchmakingConsumer.as_asgi(queue=..., matches=...,
+        # catalog=..., randomness=..., clock=...).
         self.queue = queue or get_matchmaking_queue()
         self.matches = matches or get_match_store()
         self.catalog = catalog or mvp_catalog()
@@ -38,6 +41,7 @@ class MatchmakingConsumer(BaseConsumer):
         # o ordinal vêm da partida --, então uma instância por consumer não
         # custa nada e não compartilha nada.
         self.randomness = randomness or SeededRandomSource()
+        self.clock = clock or SystemWallClock()
 
     async def on_connect(self) -> None:
         await self.join_queue()
@@ -75,6 +79,11 @@ class MatchmakingConsumer(BaseConsumer):
         except InvalidPlayerDeckError as refused:
             await self.send_error("matchmaking_failed", str(refused))
             return
+
+        # O prazo do mulligan conta da criação, e não da conexão de cada um: o
+        # relógio da §15 não pode depender de socket aberto, e é agora que o
+        # `match_found` sai para os dois.
+        match.clock = opening_match_clock(self.clock.now_ms())
 
         await self.matches.save(match)
 
