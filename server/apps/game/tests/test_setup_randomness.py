@@ -23,6 +23,7 @@ from apps.game.randomness import (
     Roll,
     SeededRandomSource,
 )
+from apps.game.tests.fake_chosen_deck import fake_chosen_deck
 from apps.game.tests.fake_player_data import fake_player_data
 
 PLAYER_ONE = 7
@@ -93,8 +94,12 @@ def run_setup(
     source = SeededRandomSource()
 
     match = start_match(
-        MatchEntry(profile=fake_player_data(PLAYER_ONE, "one"), deck=deck),
-        MatchEntry(profile=fake_player_data(PLAYER_TWO, "two"), deck=deck),
+        MatchEntry(
+            profile=fake_player_data(PLAYER_ONE, "one"), deck=fake_chosen_deck(deck)
+        ),
+        MatchEntry(
+            profile=fake_player_data(PLAYER_TWO, "two"), deck=fake_chosen_deck(deck)
+        ),
         catalog=catalog,
         randomness=source,
         seed=seed,
@@ -137,8 +142,12 @@ def _setup_across_a_round_trip() -> Match:
     source = SeededRandomSource()
 
     match = start_match(
-        MatchEntry(profile=fake_player_data(PLAYER_ONE, "one"), deck=deck),
-        MatchEntry(profile=fake_player_data(PLAYER_TWO, "two"), deck=deck),
+        MatchEntry(
+            profile=fake_player_data(PLAYER_ONE, "one"), deck=fake_chosen_deck(deck)
+        ),
+        MatchEntry(
+            profile=fake_player_data(PLAYER_TWO, "two"), deck=fake_chosen_deck(deck)
+        ),
         catalog=catalog,
         randomness=source,
         seed=SEED,

@@ -20,6 +20,7 @@ from apps.game.match import Match
 from apps.game.match.store import MatchStore
 from apps.game.protocol import MULLIGAN_EXPIRY_MS
 from apps.game.tests.fake_match_store import FakeMatchStore
+from apps.game.tests.fake_chosen_deck import fake_chosen_deck
 from apps.game.tests.fake_player_data import fake_player_data
 from apps.game.tests.fake_random_source import ScriptedRandomSource
 from apps.game.tests.fake_wall_clock import FakeWallClock
@@ -65,7 +66,7 @@ def match_entry(user_id: int, nickname: str) -> MatchEntry:
     """
     return MatchEntry(
         profile=fake_player_data(user_id, nickname),
-        deck=starter_deck(get_card_catalog()),
+        deck=fake_chosen_deck(starter_deck(get_card_catalog())),
     )
 
 

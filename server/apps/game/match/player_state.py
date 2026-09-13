@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from apps.players.services.player_queries import PlayerData
 
 from .cards_in_play import BankUnit, MatchCard
+from .chosen_deck import ChosenDeck
 
 # Fluxo de Partida §12.
 STARTING_NEXUS = 20
@@ -31,6 +32,14 @@ class PlayerState:
     nexus: int = STARTING_NEXUS
     # Topo do deck é o começo da lista: comprar é tirar de `deck[0]`.
     deck: list[MatchCard] = field(default_factory=list)
+    # O deck da entrada na fila, congelado -- lista **e** nome. Não é `deck`
+    # acima: aquele é a pilha de compra, e ela esvazia. Este é o que o jogador
+    # escolheu, e existe para o registro do resultado (feature 012) guardar com
+    # que deck cada um jogou mesmo depois de o deck ser editado ou apagado.
+    #
+    # `None` só em documento gravado antes da feature 012 e ainda dentro do TTL
+    # de 6 horas. Partida criada por este código sempre tem.
+    chosen_deck: ChosenDeck | None = None
     hand: list[MatchCard] = field(default_factory=list)
     bank: list[BankUnit] = field(default_factory=list)
     graveyard: list[MatchCard] = field(default_factory=list)

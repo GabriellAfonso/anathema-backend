@@ -24,6 +24,7 @@ from apps.game.match.store import MatchStore
 from apps.game.matchmaking.queue import MatchmakingQueue, QueueEntry
 from apps.game.tests.fake_match_store import FakeMatchStore
 from apps.game.tests.fake_matchmaking_queue import FakeMatchmakingQueue
+from apps.game.tests.fake_chosen_deck import fake_chosen_deck
 from apps.game.tests.fake_player_deck_source import FakePlayerDeckSource
 from apps.game.tests.fake_random_source import ScriptedRandomSource
 from apps.game.tests.fake_users import FakePlayerUser
@@ -73,7 +74,7 @@ def deck() -> Deck:
 
 @pytest.fixture
 def decks(deck: Deck) -> FakePlayerDeckSource:
-    return FakePlayerDeckSource({(PLAYER_ONE, THEIR_DECK_ID): deck})
+    return FakePlayerDeckSource({(PLAYER_ONE, THEIR_DECK_ID): fake_chosen_deck(deck)})
 
 
 @pytest.fixture
@@ -176,7 +177,7 @@ async def test_a_deck_that_stopped_being_valid_is_refused_naming_the_problem(
     """Um deck salvo ontem pode citar uma carta que saiu do catálogo hoje."""
     gone = CardId(9999)
     decks = FakePlayerDeckSource(
-        {(PLAYER_ONE, THEIR_DECK_ID): tuple(deck[:-1]) + (gone,)}
+        {(PLAYER_ONE, THEIR_DECK_ID): fake_chosen_deck(tuple(deck[:-1]) + (gone,))}
     )
     socket = consumer(queue, decks)
 
@@ -191,7 +192,7 @@ async def test_a_fourth_copy_is_named_with_its_count(
 ) -> None:
     """A recusa nomeia a carta e a contagem, não um "deck inválido" genérico."""
     over_the_limit = tuple(deck[:-1]) + (deck[0],)
-    decks = FakePlayerDeckSource({(PLAYER_ONE, THEIR_DECK_ID): over_the_limit})
+    decks = FakePlayerDeckSource({(PLAYER_ONE, THEIR_DECK_ID): fake_chosen_deck(over_the_limit)})
     socket = consumer(queue, decks)
 
     await socket.handle_join_queue({"deck_id": THEIR_DECK_ID})
@@ -208,7 +209,7 @@ async def test_every_problem_comes_out_at_once(
     queue: FakeMatchmakingQueue, deck: Deck
 ) -> None:
     broken = tuple(deck[:37]) + (deck[0], CardId(9999))
-    decks = FakePlayerDeckSource({(PLAYER_ONE, THEIR_DECK_ID): broken})
+    decks = FakePlayerDeckSource({(PLAYER_ONE, THEIR_DECK_ID): fake_chosen_deck(broken)})
     socket = consumer(queue, decks)
 
     await socket.handle_join_queue({"deck_id": THEIR_DECK_ID})
@@ -243,7 +244,7 @@ async def test_a_refused_player_never_takes_a_place_in_the_queue(
 async def test_an_invalid_deck_never_takes_a_place_in_the_queue(
     queue: FakeMatchmakingQueue, deck: Deck
 ) -> None:
-    decks = FakePlayerDeckSource({(PLAYER_ONE, THEIR_DECK_ID): tuple(deck[:12])})
+    decks = FakePlayerDeckSource({(PLAYER_ONE, THEIR_DECK_ID): fake_chosen_deck(tuple(deck[:12]))})
 
     await consumer(queue, decks).handle_join_queue({"deck_id": THEIR_DECK_ID})
 
@@ -271,7 +272,9 @@ async def test_a_valid_deck_takes_a_place_in_the_queue(
     await consumer(queue, decks).handle_join_queue({"deck_id": THEIR_DECK_ID})
 
     assert await queue.size() == 1
-    assert queue.waiting[0] == QueueEntry(user_id=PLAYER_ONE, deck=deck)
+    assert queue.waiting[0] == QueueEntry(
+        user_id=PLAYER_ONE, deck=fake_chosen_deck(deck)
+    )
 
 
 async def test_the_deck_is_asked_for_by_its_owner(

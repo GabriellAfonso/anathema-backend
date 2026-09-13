@@ -15,11 +15,13 @@ from apps.game.randomness import RandomSeed
 from apps.game.wall_clock import EpochMillis
 
 from .cards_in_play import BankUnit, CardInstanceId, MatchCard
+from .chosen_deck import ChosenDeck
 from .combat_state import BlockAssignment, CombatState
 from .documents import (
     BankUnitDocument,
     BlockAssignmentDocument,
     CardDocument,
+    ChosenDeckDocument,
     CombatDocument,
     MatchClockDocument,
     MatchDocument,
@@ -62,6 +64,7 @@ def to_match_document(match: Match) -> MatchDocument:
         "next_card_instance_id": match.next_card_instance_id,
         "random_seed": match.random_seed,
         "next_roll_ordinal": match.next_roll_ordinal,
+        "started_at": match.started_at,
     }
 
 
@@ -88,6 +91,7 @@ def match_from_document(document: MatchDocument) -> Match:
         next_card_instance_id=document["next_card_instance_id"],
         random_seed=RandomSeed(document["random_seed"]),
         next_roll_ordinal=document["next_roll_ordinal"],
+        started_at=epoch_millis_or_none(document.get("started_at")),
     )
 
 
@@ -102,6 +106,7 @@ def to_player_document(player: PlayerState) -> PlayerDocument:
         "graveyard": [to_card_document(card) for card in player.graveyard],
         "energy_current": player.energy_current,
         "mulligan_taken": player.mulligan_taken,
+        "chosen_deck": to_chosen_deck_document(player.chosen_deck),
     }
 
 
@@ -115,6 +120,42 @@ def player_from_document(document: PlayerDocument) -> PlayerState:
         graveyard=[card_from_document(card) for card in document["graveyard"]],
         energy_current=document["energy_current"],
         mulligan_taken=document["mulligan_taken"],
+        chosen_deck=chosen_deck_from_document(document.get("chosen_deck")),
+    )
+
+
+def epoch_millis_or_none(value: int | None) -> EpochMillis | None:
+    """Reembrulha um instante que pode não estar lá.
+
+    Ausente e `None` são o mesmo fato aqui: documento gravado antes da feature
+    012 não tem o campo, e partida que o tem nunca o tem vazio.
+
+    >>> epoch_millis_or_none(1700000000000)
+    1700000000000
+    """
+    return None if value is None else EpochMillis(value)
+
+
+def to_chosen_deck_document(
+    chosen: ChosenDeck | None,
+) -> ChosenDeckDocument | None:
+    """`None` atravessa como `None`, como `to_match_outcome_document` já faz."""
+    if chosen is None:
+        return None
+
+    return {"name": chosen.name, "card_ids": list(chosen.card_ids)}
+
+
+def chosen_deck_from_document(
+    document: ChosenDeckDocument | None,
+) -> ChosenDeck | None:
+    """A volta reembrulha os inteiros em `CardId`, como `card_from_document`."""
+    if document is None:
+        return None
+
+    return ChosenDeck(
+        name=document["name"],
+        card_ids=tuple(CardId(card_id) for card_id in document["card_ids"]),
     )
 
 

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from apps.game.randomness import RandomSeed, Roll
+from apps.game.wall_clock import EpochMillis
 
 from .cards_in_play import BankUnit, CardInstanceId
 from .combat_state import CombatState
@@ -163,6 +164,16 @@ class Match:
     # aqui, e não numa chave à parte, porque o prazo precisa atravessar os
     # workers junto do estado a que pertence, numa escrita só.
     clock: MatchClock = IDLE_MATCH_CLOCK
+    # O instante em que a partida foi criada. Estado de **transporte**, como
+    # `clock` logo acima: nenhuma regra o lê, nenhuma porta do motor o escreve,
+    # e `start_match` nem sabe que ele existe -- quem o escreve é
+    # `consumers/matchmaking.py`, na mesma linha em que arma o prazo do
+    # mulligan. Mora aqui, e não numa chave à parte, porque a duração da
+    # partida é apurada num worker que pode não ser o que a criou.
+    #
+    # `None` só em documento gravado antes da feature 012 e ainda dentro do TTL
+    # de 6 horas; nesse caso o registro sai com duração 0.
+    started_at: EpochMillis | None = None
 
     def mint_roll(self) -> Roll:
         """Cunha o próximo sorteio desta partida.

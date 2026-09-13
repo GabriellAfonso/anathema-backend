@@ -117,7 +117,32 @@ class CombatDocument(TypedDict):
     blocks: list[BlockAssignmentDocument]
 
 
-class PlayerDocument(TypedDict):
+class ChosenDeckDocument(TypedDict):
+    """O deck da entrada na fila: a lista, e o nome que ele tinha lá.
+
+    Cópia congelada, e não `deck_id`: ver o cabeçalho de `chosen_deck.py`.
+    """
+
+    name: str
+    card_ids: list[int]
+
+
+class OptionalPlayerFields(TypedDict, total=False):
+    """O que um `PlayerDocument` gravado antes da feature 012 não tem.
+
+    `total=False` numa base separada, e não no documento inteiro: tornar **todo**
+    o `PlayerDocument` opcional é o que `MatchClockDocument` já recusa logo
+    acima, e pela mesma razão. Assim só estes campos podem faltar, e
+    `document.get(...)` vale `T | None` sob mypy strict, sem `cast`.
+
+    Some quando não sobrar nenhuma partida viva daquela época -- 6 horas depois
+    da implantação, pelo TTL de `store.py`.
+    """
+
+    chosen_deck: ChosenDeckDocument | None
+
+
+class PlayerDocument(OptionalPlayerFields):
     profile: PlayerData
     nexus: int
     deck: list[CardDocument]
@@ -128,7 +153,16 @@ class PlayerDocument(TypedDict):
     mulligan_taken: bool
 
 
-class MatchDocument(TypedDict):
+class OptionalMatchFields(TypedDict, total=False):
+    """O que um `MatchDocument` gravado antes da feature 012 não tem.
+
+    Mesma forma e mesma razão de `OptionalPlayerFields`.
+    """
+
+    started_at: int | None
+
+
+class MatchDocument(OptionalMatchFields):
     """A partida inteira. `players` é lista de dois, na ordem do par.
 
     Não tem número de versão de esquema, e continua não tendo. A `version` que

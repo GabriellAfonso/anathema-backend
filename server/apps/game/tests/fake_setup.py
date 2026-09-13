@@ -10,7 +10,7 @@ montada duas vezes por estas funções é a mesma partida, exceto pelo `match_id
 que é sorteado fora do controle da semente.
 """
 
-from apps.game.cards import Deck, mvp_catalog, starter_deck
+from apps.game.cards import Deck, mvp_catalog
 from apps.game.engine import (
     MatchEntry,
     begin_round_cycle,
@@ -19,6 +19,7 @@ from apps.game.engine import (
 )
 from apps.game.match import Match
 from apps.game.randomness import RandomSeed, RandomSource
+from apps.game.tests.fake_chosen_deck import fake_chosen_deck
 from apps.game.tests.fake_player_data import fake_player_data
 from apps.game.tests.fake_random_source import ScriptedRandomSource
 
@@ -39,7 +40,7 @@ def fake_started_match(
     <MatchPhase.MULLIGAN: 'mulligan'>
     """
     catalog = mvp_catalog()
-    chosen = deck if deck is not None else starter_deck(catalog)
+    chosen = fake_chosen_deck(deck)
 
     return start_match(
         MatchEntry(profile=fake_player_data(user_id_one, "one"), deck=chosen),
