@@ -83,7 +83,26 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [f"{REDIS_URL}/{REDIS_CHANNEL_LAYER_DB}"],
+            "hosts": [
+                {
+                    "address": f"{REDIS_URL}/{REDIS_CHANNEL_LAYER_DB}",
+                    # redis-py 8.1 defaults the read timeout to 5s
+                    # (DEFAULT_SOCKET_TIMEOUT in redis/_defaults.py), and
+                    # channels_redis 4.3 waits for messages with a BZPOPMIN of
+                    # brpop_timeout = 5s. The two waits tie, the read raises
+                    # `TimeoutError: Timeout reading from anathema_redis:6379`
+                    # inside channel_receive, and every socket idle for 5s dies
+                    # without a close frame. This is the server's own link to
+                    # Redis, not a player idle limit -- that is the turn clock.
+                    # No read timeout is safe: BZPOPMIN returns by itself every
+                    # brpop_timeout seconds.
+                    "socket_timeout": None,
+                    # Without this, redis-py falls back to socket_timeout for
+                    # the connect too, and an unreachable Redis would hang the
+                    # consumer forever instead of failing.
+                    "socket_connect_timeout": 5,
+                },
+            ],
         },
     },
 }
