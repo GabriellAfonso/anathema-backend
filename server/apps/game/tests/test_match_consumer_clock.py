@@ -16,6 +16,9 @@ from apps.game.cards import CardCatalog, mvp_catalog
 from apps.game.match import Match
 from apps.game.match_timers import MatchClockTicker
 from apps.game.protocol import advance_match_clock, opening_match_clock
+from apps.game.tests.fake_finished_match_recorder import (
+    FakeFinishedMatchRecorder,
+)
 from apps.game.tests.fake_combat_board import (
     DARK_AGE,
     KHRAS,
@@ -75,6 +78,7 @@ def ticker(
         catalog=catalog,
         randomness=ScriptedRandomSource(),
         clock=clock,
+        recorder=FakeFinishedMatchRecorder(),
     )
 
 

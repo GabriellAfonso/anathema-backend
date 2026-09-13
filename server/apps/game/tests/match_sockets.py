@@ -13,6 +13,10 @@ from apps.game.cards import mvp_catalog
 from apps.game.consumers.match import MatchConsumer
 from apps.game.engine import PlayerAction
 from apps.game.match import Match
+from apps.game.history import FinishedMatchRecorder
+from apps.game.tests.fake_finished_match_recorder import (
+    FakeFinishedMatchRecorder,
+)
 from apps.game.tests.fake_match_store import FakeMatchStore
 from apps.game.tests.fake_random_source import ScriptedRandomSource
 from apps.game.tests.fake_users import FakePlayerUser
@@ -28,11 +32,17 @@ async def open_match_socket(
     match_id: str,
     *,
     clock: WallClock | None = None,
+    recorder: FinishedMatchRecorder | None = None,
 ) -> tuple[WebsocketTestClient, Frame]:
     """Conecta o jogador e devolve o socket com o `match_start` que chegou.
 
     `clock` é o mesmo relógio falso do teste quando o cenário fala de prazo: o
     socket mede o tempo restante com ele, como o ticker mede.
+
+    `recorder` é o gravador do resultado. Sem ele o socket ganha um fake novo --
+    nenhum teste de websocket toca o banco, e é o `conftest.py` deste pacote que
+    registra a regra. Quem fala de registro passa o **mesmo** fake aos dois
+    sockets, que é como se prova que a partida vira um registro só.
     """
     client = WebsocketTestClient(
         MatchConsumer.as_asgi(
@@ -40,6 +50,7 @@ async def open_match_socket(
             catalog=mvp_catalog(),
             randomness=ScriptedRandomSource(),
             clock=clock,
+            recorder=recorder or FakeFinishedMatchRecorder(),
         ),
         "/ws/match/",
         query_string=f"matchId={match_id}",

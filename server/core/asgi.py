@@ -13,6 +13,7 @@ from channels.layers import get_channel_layer  # noqa: E402
 from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 
 from apps.game.cards import mvp_catalog  # noqa: E402
+from apps.game.history import DatabaseFinishedMatchRecorder  # noqa: E402
 from apps.game.match.client import (  # noqa: E402
     get_match_store,
     get_match_wake_queue,
@@ -40,6 +41,7 @@ def build_match_clock_ticker() -> MatchClockTicker:
         catalog=mvp_catalog(),
         randomness=SeededRandomSource(),
         clock=SystemWallClock(),
+        recorder=DatabaseFinishedMatchRecorder(),
     )
 
 

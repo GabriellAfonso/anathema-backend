@@ -24,6 +24,7 @@ from apps.game.consumers.match_delivery import (
     deliver_turn_warning,
 )
 from apps.game.engine import IllegalActionError
+from apps.game.history import FinishedMatchRecorder, record_finished_match
 from apps.game.match import clock_wake_at
 from apps.game.match.store import ConcurrentMatchWriteError, MatchNotFoundError
 from apps.game.match.wake_queue import ClaimedWake
@@ -77,6 +78,7 @@ class MatchClockTicker:
         catalog: CardCatalog,
         randomness: RandomSource,
         clock: WallClock,
+        recorder: FinishedMatchRecorder,
     ) -> None:
         self.matches = matches
         self.wake_queue = wake_queue
@@ -84,6 +86,7 @@ class MatchClockTicker:
         self.catalog = catalog
         self.randomness = randomness
         self.clock = clock
+        self.recorder = recorder
 
     async def run(self) -> None:
         """O laço, até a task ser cancelada no desligamento do worker."""
@@ -183,6 +186,13 @@ class MatchClockTicker:
             change.applied_command(),
             origin=ClockOrigin(event),
             now=now,
+        )
+
+        # O estouro do relógio termina partida como qualquer jogada -- uma
+        # desistência automática no mulligan, por exemplo --, e por isso registra
+        # pela mesma porta. `_warn` não: a marca do aviso não passa pelo motor.
+        await record_finished_match(
+            self.recorder, change.recorded_before(), stored, ended_at=now
         )
 
     async def _release(self, wake: ClaimedWake) -> None:

@@ -25,6 +25,9 @@ from apps.game.protocol import (
     advance_match_clock,
     opening_match_clock,
 )
+from apps.game.tests.fake_finished_match_recorder import (
+    FakeFinishedMatchRecorder,
+)
 from apps.game.tests.fake_combat_board import PLAYER_ONE, PLAYER_TWO, fake_combat_board
 from apps.game.tests.fake_random_source import ScriptedRandomSource
 from apps.game.tests.fake_setup import fake_started_match
@@ -351,4 +354,5 @@ def _ticker_over(
         catalog=mvp_catalog(),
         randomness=ScriptedRandomSource(),
         clock=clock,
+        recorder=FakeFinishedMatchRecorder(),
     )
