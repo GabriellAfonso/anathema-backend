@@ -10,9 +10,12 @@ services:
         INSTALL_DEV: "true"
     # Dev-only override of the image's production CMD.
     # `--lifespan on` liga o relógio da vez (§15) junto com o worker.
-    command: [ "uvicorn", "core.asgi:application",
-               "--host", "0.0.0.0", "--port", "8000",
-               "--lifespan", "on", "--reload" ]
+    # `migrate` antes de subir: sem ele um `docker compose up` limpo quebra
+    # cadastro, decks, fila e histórico em tabela inexistente. Só no dev; em
+    # produção os 4 workers correriam para migrar ao mesmo tempo. `exec` deixa o
+    # uvicorn como PID 1, recebendo o SIGTERM do `docker compose stop`.
+    command: [ "sh", "-c",
+               "python manage.py migrate --noinput && exec uvicorn core.asgi:application --host 0.0.0.0 --port 8000 --lifespan on --reload" ]
     ports:
       - "8000:8000"
     volumes:
