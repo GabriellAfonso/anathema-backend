@@ -11,9 +11,10 @@ from typing import Any
 
 import pytest
 
-from apps.game.cards import EffectDuration
+from apps.game.cards import CardId, EffectDuration
 from apps.game.match import (
     AttackModifier,
+    ChosenDeck,
     DamageImmunity,
     HealthModifier,
     Match,
@@ -28,6 +29,7 @@ from apps.game.tests.fake_match_state import (
     fake_match_in_progress,
     fake_new_match,
 )
+from apps.game.wall_clock import EpochMillis
 
 
 @pytest.fixture
@@ -210,3 +212,51 @@ def test_an_absent_token_holder_comes_back_absent(match: Match) -> None:
 
     assert reloaded.token_holder_user_id is None
     assert reloaded.priority_user_id is None
+
+
+# --- O começo da partida e o deck da entrada (feature 012) -------------------
+
+
+def test_the_start_instant_survives_the_round_trip(match: Match) -> None:
+    """A duração da partida é apurada num worker que pode não ser o que a criou."""
+    match.started_at = EpochMillis(1_700_000_000_000)
+
+    assert round_trip(match).started_at == 1_700_000_000_000
+
+
+def test_a_document_without_the_start_instant_comes_back_absent(
+    match: Match,
+) -> None:
+    """Partida gravada antes da feature 012 e ainda dentro do TTL de 6 horas.
+
+    Recusar a leitura derrubaria uma partida em curso numa implantação; o
+    registro sai com duração 0, e é a derivação que decide isso.
+    """
+    document = raw_json(match)
+    document.pop("started_at")
+
+    assert match_from_document(document).started_at is None
+
+
+def test_the_chosen_deck_of_each_player_survives_the_round_trip(
+    match: Match,
+) -> None:
+    """É a cópia congelada que o registro do resultado guarda."""
+    match.players[0].chosen_deck = ChosenDeck(
+        name="Agro", card_ids=(CardId(1), CardId(1), CardId(2))
+    )
+
+    reloaded = round_trip(match).players[0].chosen_deck
+
+    assert reloaded == ChosenDeck(
+        name="Agro", card_ids=(CardId(1), CardId(1), CardId(2))
+    )
+
+
+def test_a_player_document_without_a_chosen_deck_comes_back_absent(
+    match: Match,
+) -> None:
+    document = raw_json(match)
+    document["players"][0].pop("chosen_deck")
+
+    assert match_from_document(document).players[0].chosen_deck is None

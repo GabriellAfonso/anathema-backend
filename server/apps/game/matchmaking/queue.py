@@ -12,6 +12,10 @@ join and the pair produce a match different from the one that was validated --
 or no match at all, if the deck was deleted. What was validated on the way in is
 what the match uses.
 
+Since feature 012 the entry carries the deck's **name** as well, so the match
+record can say which deck a player won with after that deck has been renamed or
+deleted. That is why the hash value is a JSON object and no longer a bare array.
+
 The list still holds bare user ids, and the decks live in a parallel hash. That
 is deliberate: `LREM` removes **by exact value**, and it is what keeps a
 reconnecting player from sitting in the list twice. A JSON blob per entry would
@@ -24,12 +28,13 @@ from dataclasses import dataclass
 
 from redis.asyncio import Redis
 
-from apps.game.cards import CardId, Deck
+from apps.game.cards import CardId
+from apps.game.match import ChosenDeck
 
 # Enqueue with the deck and take a pair in a single indivisible step.
 #
 # KEYS[1] = queue key          KEYS[2] = deck hash key
-# ARGV[1] = user id joining    ARGV[2] = that player's deck, as a JSON array
+# ARGV[1] = user id joining    ARGV[2] = that player's deck, as a JSON object
 #
 # LREM first so a reconnecting player is not left twice in the list -- without
 # it a player with two sockets can be matched against themselves. It also means
@@ -73,12 +78,12 @@ class QueueEntry:
     deck together: with them apart, handing one player's deck to the other is a
     mistake no type catches.
 
-    >>> QueueEntry(user_id=7, deck=(CardId(1), CardId(1))).user_id
+    >>> QueueEntry(user_id=7, deck=ChosenDeck("Agro", (CardId(1),))).user_id
     7
     """
 
     user_id: int
-    deck: Deck
+    deck: ChosenDeck
 
 
 class QueuedDeckMissingError(Exception):
@@ -150,18 +155,28 @@ class MatchmakingQueue:
         return int(await self._redis.llen(self._key))
 
 
-def _encoded_deck(deck: Deck) -> str:
+def _encoded_deck(deck: ChosenDeck) -> str:
     """The deck as Redis stores it.
 
     The wire format lives here, not in the caller: the key layout is the
     wrapper's business, the way the Lua scripts are.
+
+    An object and not a bare array since feature 012, so the name rides along.
+    The queue list itself still holds bare user ids -- `LREM` removes by exact
+    value, and that is what keeps a reconnecting player from sitting in the list
+    twice.
     """
-    return json.dumps([int(card_id) for card_id in deck])
+    return json.dumps({"name": deck.name, "card_ids": [int(c) for c in deck.card_ids]})
 
 
-def _decoded_deck(encoded: bytes | str) -> Deck:
-    """The deck as it went in, identifiers and order intact."""
-    return tuple(CardId(card_id) for card_id in json.loads(encoded))
+def _decoded_deck(encoded: bytes | str) -> ChosenDeck:
+    """The deck as it went in: name, identifiers and order intact."""
+    stored = json.loads(encoded)
+
+    return ChosenDeck(
+        name=stored["name"],
+        card_ids=tuple(CardId(card_id) for card_id in stored["card_ids"]),
+    )
 
 
 def _paired_entries(paired: list[bytes | str]) -> tuple[QueueEntry, QueueEntry]:

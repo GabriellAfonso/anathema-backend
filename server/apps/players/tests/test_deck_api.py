@@ -320,13 +320,18 @@ def test_deleting_a_deck_does_not_touch_a_match_in_progress(
     entrou não muda nada do que está em jogo."""
     from apps.game.engine import MatchEntry, start_match
     from apps.game.randomness import SeededRandomSource, new_random_seed
+    from apps.game.tests.fake_chosen_deck import fake_chosen_deck
     from apps.game.tests.fake_player_data import fake_player_data
     from apps.game.tests.match_snapshot import match_snapshot
 
     card_ids = [CardId(card_id) for card_id in deck.card_ids]
     match = start_match(
-        MatchEntry(profile=fake_player_data(7, "one"), deck=card_ids),
-        MatchEntry(profile=fake_player_data(9, "two"), deck=card_ids),
+        MatchEntry(
+            profile=fake_player_data(7, "one"), deck=fake_chosen_deck(card_ids)
+        ),
+        MatchEntry(
+            profile=fake_player_data(9, "two"), deck=fake_chosen_deck(card_ids)
+        ),
         catalog=get_card_catalog(),
         randomness=SeededRandomSource(),
         seed=new_random_seed(),

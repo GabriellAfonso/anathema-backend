@@ -19,6 +19,7 @@ from apps.game.engine import (
 )
 from apps.game.match import Match, MatchCard, MatchPhase, PlayerState
 from apps.game.randomness import RandomSeed
+from apps.game.tests.fake_chosen_deck import fake_chosen_deck
 from apps.game.tests.fake_player_data import fake_player_data
 from apps.game.tests.fake_random_source import ScriptedRandomSource
 
@@ -47,8 +48,12 @@ def match(catalog: CardCatalog, deck: Deck) -> Match:
 
 def started(catalog: CardCatalog, first: Deck, second: Deck) -> Match:
     return start_match(
-        MatchEntry(profile=fake_player_data(PLAYER_ONE, "one"), deck=first),
-        MatchEntry(profile=fake_player_data(PLAYER_TWO, "two"), deck=second),
+        MatchEntry(
+            profile=fake_player_data(PLAYER_ONE, "one"), deck=fake_chosen_deck(first)
+        ),
+        MatchEntry(
+            profile=fake_player_data(PLAYER_TWO, "two"), deck=fake_chosen_deck(second)
+        ),
         catalog=catalog,
         randomness=ScriptedRandomSource(),
         seed=SEED,

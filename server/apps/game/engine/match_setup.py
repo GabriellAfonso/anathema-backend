@@ -15,6 +15,7 @@ from uuid import uuid4
 from apps.game.cards import CardCatalog, CardId, Deck, DeckProblem, deck_problems
 from apps.game.match import (
     CardInstanceId,
+    ChosenDeck,
     Match,
     MatchCard,
     MatchPhase,
@@ -37,12 +38,16 @@ class MatchEntry:
     quatro parâmetros posicionais, dar o deck de um ao perfil do outro é um
     erro que nenhum tipo pega.
 
-    >>> MatchEntry(profile=await get_player_public_data(7), deck=deck).deck[0]
-    15
+    `ChosenDeck` e não `Deck` desde a feature 012: o **nome** do deck vem junto
+    da lista, porque é ele que o registro do resultado guarda, e ele se perde se
+    for relido depois -- o deck pode ter sido renomeado ou apagado.
+
+    >>> MatchEntry(profile=await get_player_public_data(7), deck=deck).deck.name
+    'Agro'
     """
 
     profile: PlayerData
-    deck: Deck
+    deck: ChosenDeck
 
 
 class InvalidPlayerDeckError(Exception):
@@ -93,14 +98,14 @@ def start_match(
     match = Match(
         match_id=str(uuid4()),
         players=(
-            PlayerState(profile=first.profile),
-            PlayerState(profile=second.profile),
+            PlayerState(profile=first.profile, chosen_deck=first.deck),
+            PlayerState(profile=second.profile, chosen_deck=second.deck),
         ),
         random_seed=seed,
     )
 
-    _deal_opening_hand(match, match.players[0], first.deck, randomness)
-    _deal_opening_hand(match, match.players[1], second.deck, randomness)
+    _deal_opening_hand(match, match.players[0], first.deck.card_ids, randomness)
+    _deal_opening_hand(match, match.players[1], second.deck.card_ids, randomness)
 
     return match
 
@@ -133,7 +138,7 @@ def finish_setup(match: Match, *, randomness: RandomSource) -> None:
 
 def _ensure_valid_entry(entry: MatchEntry, catalog: CardCatalog) -> None:
     """Recusa nomeando o dono e todos os problemas, nunca só o primeiro."""
-    problems = deck_problems(entry.deck, catalog)
+    problems = deck_problems(entry.deck.card_ids, catalog)
 
     if problems:
         raise InvalidPlayerDeckError(entry.profile["user_id"], problems)

@@ -14,7 +14,8 @@ import pytest
 
 from redis.asyncio import Redis
 
-from apps.game.cards import CardId, Deck
+from apps.game.cards import CardId
+from apps.game.match import ChosenDeck
 from apps.game.matchmaking.queue import (
     MatchmakingQueue,
     QueuedDeckMissingError,
@@ -23,9 +24,9 @@ from apps.game.matchmaking.queue import (
 
 # Listas curtas e distintas: o que está sob teste é o transporte da lista, não
 # as três regras de deck -- a fila não valida nada.
-ONE_DECK: Deck = (CardId(1), CardId(1), CardId(2))
-TWO_DECK: Deck = (CardId(5), CardId(7))
-OTHER_DECK: Deck = (CardId(9),)
+ONE_DECK = ChosenDeck(name="One", card_ids=(CardId(1), CardId(1), CardId(2)))
+TWO_DECK = ChosenDeck(name="Two", card_ids=(CardId(5), CardId(7)))
+OTHER_DECK = ChosenDeck(name="Other", card_ids=(CardId(9),))
 
 
 @pytest.fixture
@@ -33,7 +34,7 @@ def queue(redis: Redis) -> MatchmakingQueue:
     return MatchmakingQueue(redis, key="test:matchmaking:queue")
 
 
-def entry(user_id: int, deck: Deck = ONE_DECK) -> QueueEntry:
+def entry(user_id: int, deck: ChosenDeck = ONE_DECK) -> QueueEntry:
     return QueueEntry(user_id=user_id, deck=deck)
 
 
@@ -69,13 +70,29 @@ async def test_each_deck_comes_back_with_its_own_player(
 async def test_the_deck_keeps_its_repetition_and_order(
     queue: MatchmakingQueue,
 ) -> None:
-    repeated: Deck = (CardId(3), CardId(1), CardId(3), CardId(3))
+    repeated = ChosenDeck(
+        name="Repetido", card_ids=(CardId(3), CardId(1), CardId(3), CardId(3))
+    )
     await queue.join(entry(1, repeated))
 
     pair = await queue.join(entry(2))
 
     assert pair is not None
     assert pair[0].deck == repeated
+
+
+async def test_the_deck_name_travels_with_the_list(queue: MatchmakingQueue) -> None:
+    """Desde a feature 012 o nome viaja junto.
+
+    Ele é o que o registro do resultado guarda, e relê-lo no fim leria o nome de
+    **depois** -- o deck pode ter sido renomeado ou apagado no meio da partida.
+    """
+    await queue.join(entry(1, ONE_DECK))
+
+    pair = await queue.join(entry(2, TWO_DECK))
+
+    assert pair is not None
+    assert (pair[0].deck.name, pair[1].deck.name) == ("One", "Two")
 
 
 async def test_pair_leaves_the_queue(queue: MatchmakingQueue) -> None:
@@ -186,9 +203,14 @@ async def test_concurrent_joins_never_mix_up_the_decks(
     players = list(range(1, 101))
 
     results = await asyncio.gather(
-        *(queue.join(entry(p, (CardId(p),))) for p in players)
+        *(
+            queue.join(entry(p, ChosenDeck(name=f"deck-{p}", card_ids=(CardId(p),))))
+            for p in players
+        )
     )
 
     for pair in [r for r in results if r is not None]:
         for paired in pair:
-            assert paired.deck == (CardId(paired.user_id),)
+            assert paired.deck == ChosenDeck(
+                name=f"deck-{paired.user_id}", card_ids=(CardId(paired.user_id),)
+            )

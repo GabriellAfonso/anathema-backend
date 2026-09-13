@@ -16,7 +16,8 @@ from typing import Protocol, cast
 from channels.db import database_sync_to_async
 from django.db.models import QuerySet
 
-from apps.game.cards import CardId, Deck
+from apps.game.cards import CardId
+from apps.game.match import ChosenDeck
 from apps.players.models.deck import PlayerDeck
 
 
@@ -64,8 +65,13 @@ class PlayerDeckSource(Protocol):
     esta porta que deixa isso continuar valendo.
     """
 
-    async def deck_for(self, *, user_id: int, deck_id: int) -> Deck | None:
-        """A lista de cartas daquele deck, ou `None` se ele não é do jogador."""
+    async def deck_for(self, *, user_id: int, deck_id: int) -> ChosenDeck | None:
+        """O deck daquele jogador -- lista e nome --, ou `None` se não é dele.
+
+        Nome junto da lista desde a feature 012: ele viaja até o registro do
+        resultado, e uma segunda ida ao banco no momento do registro leria o
+        nome de **depois**, que é o que a cópia congelada existe para evitar.
+        """
         ...
 
 
@@ -73,29 +79,35 @@ class DatabasePlayerDeckSource:
     """A implementação de verdade: o deck vem do banco, pelo dono.
 
     >>> await DatabasePlayerDeckSource().deck_for(user_id=7, deck_id=4)
-    (1, 1, 1, 2, ...)
+    ChosenDeck(name='Agro', card_ids=(1, 1, 1, 2, ...))
     """
 
-    async def deck_for(self, *, user_id: int, deck_id: int) -> Deck | None:
-        """A lista guardada, ou `None` -- inexistente e alheio, indistintos.
+    async def deck_for(self, *, user_id: int, deck_id: int) -> ChosenDeck | None:
+        """O deck guardado, ou `None` -- inexistente e alheio, indistintos.
 
         O `cast` existe porque `database_sync_to_async` chega sem stubs e
         devolve `Any`; a função embrulhada é tipada logo abaixo.
         """
-        return cast(Deck | None, await _read_deck(user_id, deck_id))
+        return cast(ChosenDeck | None, await _read_deck(user_id, deck_id))
 
 
 # channels não publica stubs, então o decorator chega como `Any` e levaria a
 # função inteira junto.
 @database_sync_to_async  # type: ignore[untyped-decorator]
-def _read_deck(user_id: int, deck_id: int) -> Deck | None:
-    """A leitura síncrona, do jeito que o Django sabe fazer."""
+def _read_deck(user_id: int, deck_id: int) -> ChosenDeck | None:
+    """A leitura síncrona, do jeito que o Django sabe fazer.
+
+    Lista e nome na mesma ida: são a mesma linha do banco.
+    """
     deck = deck_of(user_id, deck_id)
 
     if deck is None:
         return None
 
-    return tuple(CardId(card_id) for card_id in deck.card_ids)
+    return ChosenDeck(
+        name=deck.name,
+        card_ids=tuple(CardId(card_id) for card_id in deck.card_ids),
+    )
 
 
 DATABASE_SOURCE_MATCHES_THE_PROTOCOL: PlayerDeckSource = DatabasePlayerDeckSource()

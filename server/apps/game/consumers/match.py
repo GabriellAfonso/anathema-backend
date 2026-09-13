@@ -3,6 +3,11 @@ import logging
 from urllib.parse import parse_qs
 
 from apps.game.cards import CardCatalog, mvp_catalog
+from apps.game.history import (
+    DatabaseFinishedMatchRecorder,
+    FinishedMatchRecorder,
+    record_finished_match,
+)
 from apps.game.match.client import get_match_store
 from apps.game.match.store import (
     ConcurrentMatchWriteError,
@@ -53,16 +58,18 @@ class MatchConsumer(BaseConsumer):
         catalog: CardCatalog | None = None,
         randomness: RandomSource | None = None,
         clock: WallClock | None = None,
+        recorder: FinishedMatchRecorder | None = None,
         **kwargs: object,
     ) -> None:
         super().__init__(*args, **kwargs)
         # Channels passes as_asgi(**initkwargs) through to __init__, so tests
-        # wire all four with MatchConsumer.as_asgi(matches=..., catalog=...,
-        # randomness=..., clock=...).
+        # wire all five with MatchConsumer.as_asgi(matches=..., catalog=...,
+        # randomness=..., clock=..., recorder=...).
         self.matches = matches or get_match_store()
         self.catalog = catalog or mvp_catalog()
         self.randomness = randomness or SeededRandomSource()
         self.clock = clock or SystemWallClock()
+        self.recorder = recorder or DatabaseFinishedMatchRecorder()
 
     async def on_connect(self) -> None:
         """Só deixa entrar quem joga a partida pedida."""
@@ -200,13 +207,22 @@ class MatchConsumer(BaseConsumer):
             await self.refuse_failure(failure, match_id, content)
             return
 
+        now = self.clock.now_ms()
+
         await deliver_match_update(
             self.channel_layer,
             change.recorded_before(),
             stored,
             command,
             origin=PlayerOrigin(),
-            now=self.clock.now_ms(),
+            now=now,
+        )
+
+        # Depois da entrega, e fora da mutação: ver o cabeçalho de
+        # `history/record_finished_match.py`. Não faz nada quando esta jogada
+        # não terminou a partida.
+        await record_finished_match(
+            self.recorder, change.recorded_before(), stored, ended_at=now
         )
 
     async def refuse_failure(

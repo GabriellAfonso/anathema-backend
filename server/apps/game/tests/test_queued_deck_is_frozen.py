@@ -23,6 +23,7 @@ from apps.game.matchmaking.queue import MatchmakingQueue
 from apps.players.services.player_queries import PlayerData
 from apps.game.tests.fake_match_store import FakeMatchStore
 from apps.game.tests.fake_matchmaking_queue import FakeMatchmakingQueue
+from apps.game.tests.fake_chosen_deck import fake_chosen_deck
 from apps.game.tests.fake_player_deck_source import FakePlayerDeckSource
 from apps.game.tests.fake_player_data import fake_player_data
 from apps.game.tests.fake_random_source import ScriptedRandomSource
@@ -60,7 +61,10 @@ def deck() -> Deck:
 @pytest.fixture
 def decks(deck: Deck) -> FakePlayerDeckSource:
     return FakePlayerDeckSource(
-        {(PLAYER_ONE, DECK_ID): deck, (PLAYER_TWO, DECK_ID): deck}
+        {
+            (PLAYER_ONE, DECK_ID): fake_chosen_deck(deck),
+            (PLAYER_TWO, DECK_ID): fake_chosen_deck(deck),
+        }
     )
 
 
@@ -135,7 +139,7 @@ async def test_the_match_uses_the_list_validated_on_the_way_in(
     """O jogador troca todas as cartas depois de entrar, e antes do par."""
     await join(queue, matches, decks, PLAYER_ONE)
 
-    replacement = tuple(CardId(1) for _ in deck)
+    replacement = fake_chosen_deck(tuple(CardId(1) for _ in deck))
     decks.give(user_id=PLAYER_ONE, deck_id=DECK_ID, deck=replacement)
     await join(queue, matches, decks, PLAYER_TWO)
 
@@ -180,7 +184,7 @@ async def test_each_player_keeps_their_own_list(
     deck: Deck,
 ) -> None:
     """Os dois decks não se trocam de dono no caminho da fila até o setup."""
-    reversed_deck = tuple(reversed(deck))
+    reversed_deck = fake_chosen_deck(tuple(reversed(deck)))
     decks.give(user_id=PLAYER_TWO, deck_id=DECK_ID, deck=reversed_deck)
 
     await join(queue, matches, decks, PLAYER_ONE)
@@ -189,4 +193,4 @@ async def test_each_player_keeps_their_own_list(
     in_play = decks_in_play(matches)
 
     assert in_play[PLAYER_ONE] == sorted(deck)
-    assert in_play[PLAYER_TWO] == sorted(reversed_deck)
+    assert in_play[PLAYER_TWO] == sorted(reversed_deck.card_ids)

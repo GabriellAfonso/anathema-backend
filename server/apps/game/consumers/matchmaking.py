@@ -137,7 +137,7 @@ class MatchmakingConsumer(BaseConsumer):
             )
             return
 
-        problems = deck_problems(deck, self.catalog)
+        problems = deck_problems(deck.card_ids, self.catalog)
 
         if problems:
             await self.refuse_invalid_deck(deck_id, problems)
@@ -213,7 +213,14 @@ class MatchmakingConsumer(BaseConsumer):
         # O prazo do mulligan conta da criação, e não da conexão de cada um: o
         # relógio da §15 não pode depender de socket aberto, e é agora que o
         # `match_found` sai para os dois.
-        match.clock = opening_match_clock(self.clock.now_ms())
+        #
+        # `started_at` é escrito aqui, na mesma linha, e não dentro de
+        # `start_match`: o motor não lê tempo (§15), e `test_engine_reads_no_time`
+        # reprova quem tentar. É daqui que sai a duração no registro do
+        # resultado (feature 012).
+        created_at = self.clock.now_ms()
+        match.started_at = created_at
+        match.clock = opening_match_clock(created_at)
 
         await self.matches.save(match)
 

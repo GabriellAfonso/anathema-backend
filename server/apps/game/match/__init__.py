@@ -15,11 +15,13 @@ Quem monta uma partida é `apps.game.engine.start_match`, que executa a §3.
 """
 
 from .cards_in_play import BankUnit, CardInstanceId, MatchCard
+from .chosen_deck import ChosenDeck
 from .combat_state import BlockAssignment, CombatState
 from .documents import (
     BankUnitDocument,
     BlockAssignmentDocument,
     CardDocument,
+    ChosenDeckDocument,
     CombatDocument,
     MatchClockDocument,
     MatchDocument,
@@ -66,6 +68,8 @@ __all__ = [
     "CardInstanceId",
     "MatchCard",
     "BankUnit",
+    # Deck da entrada na fila, congelado (feature 012)
+    "ChosenDeck",
     # Modificadores
     "ModifierKind",
     "AttackModifier",
@@ -95,6 +99,7 @@ __all__ = [
     "ModifierDocument",
     "BankUnitDocument",
     "BlockAssignmentDocument",
+    "ChosenDeckDocument",
     "CombatDocument",
     "PlayerDocument",
     "MatchOutcomeDocument",

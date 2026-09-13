@@ -10,7 +10,7 @@ porque é isso que a implementação real faz, e um fake que os distinguisse
 deixaria passar um consumer que também os distingue.
 """
 
-from apps.game.cards import Deck
+from apps.game.match import ChosenDeck
 from apps.players.services.deck_queries import PlayerDeckSource
 
 
@@ -24,13 +24,13 @@ class FakePlayerDeckSource:
     True
     """
 
-    def __init__(self, decks: dict[tuple[int, int], Deck] | None = None) -> None:
-        self.decks: dict[tuple[int, int], Deck] = dict(decks or {})
+    def __init__(self, decks: dict[tuple[int, int], ChosenDeck] | None = None) -> None:
+        self.decks: dict[tuple[int, int], ChosenDeck] = dict(decks or {})
         # O que foi pedido, na ordem. Um teste confere que o consumer pergunta
         # pelo deck **do autor**, e não por um `deck_id` solto.
         self.asked: list[tuple[int, int]] = []
 
-    def give(self, *, user_id: int, deck_id: int, deck: Deck) -> None:
+    def give(self, *, user_id: int, deck_id: int, deck: ChosenDeck) -> None:
         """Guarda um deck daquele jogador.
 
         >>> source.give(user_id=7, deck_id=1, deck=deck)
@@ -44,7 +44,7 @@ class FakePlayerDeckSource:
         """
         self.decks.pop((user_id, deck_id), None)
 
-    async def deck_for(self, *, user_id: int, deck_id: int) -> Deck | None:
+    async def deck_for(self, *, user_id: int, deck_id: int) -> ChosenDeck | None:
         self.asked.append((user_id, deck_id))
 
         return self.decks.get((user_id, deck_id))
