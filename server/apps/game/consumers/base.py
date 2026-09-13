@@ -7,7 +7,13 @@ from django.contrib.auth.base_user import AbstractBaseUser
 from django.core.cache import cache
 from django.utils import timezone
 
-from apps.game.protocol import MALFORMED_MESSAGE, UNKNOWN_MESSAGE_TYPE
+from apps.game.protocol import (
+    MALFORMED_MESSAGE,
+    PONG,
+    UNKNOWN_MESSAGE_TYPE,
+    is_ping,
+    pong_payload,
+)
 
 # Close code do gate de autenticação, no range privado 4000-4999. Os gates de
 # domínio continuam a série a partir dele (MatchConsumer usa 44xx).
@@ -160,31 +166,89 @@ class BaseConsumer(AsyncJsonWebsocketConsumer):
         bytes_data: bytes | None = None,
         **kwargs: object,
     ) -> None:
+        """Decodifica o frame, responde o ping, e entrega o resto ao `receive_json`.
+
+        As recusas de forma moram em `decode_client_frame`.
+        """
+        content = await self.decode_client_frame(text_data)
+
+        if content is None:
+            return
+
+        # O ping é tratado aqui, e não num `handle_ping`: o `MatchConsumer`
+        # substitui o `receive_json` inteiro e não passa pelo roteamento, então
+        # este é o último ponto por onde os dois sockets passam juntos (feature
+        # 013, research D1).
+        if is_ping(content):
+            await self.answer_ping(content)
+            return
+
+        await self.receive_json(content)
+
+    def passed_socket_gates(self) -> bool:
+        """Se o socket passou pelos gates e pode receber resposta a mensagem.
+
+        Os gates aceitam o socket antes de recusar, para o motivo chegar ao
+        cliente, e fecham logo depois; `accepted` continua False no socket que o
+        gate de autenticação recusou. Frame mandado depois do close é o
+        `RuntimeError: Unexpected ASGI message 'websocket.send', after sending
+        'websocket.close'` que `test_base_consumer_lifecycle.py` registra.
+
+        >>> self.passed_socket_gates()
+        True
+        """
+        return self.accepted
+
+    async def answer_ping(self, content: Mapping[str, object]) -> None:
+        """Responde o ping só a este socket, com o eco do payload.
+
+        `send_event`, e não `group_send`: o pong não pode chegar a outro socket
+        do mesmo usuário nem ao oponente, e o channel layer fica fora do caminho
+        (research D4). Não renova presença: ela é por usuário, o ping é por
+        socket, e o item continua adiado no `Backend/TODO.md` (research D5).
+
+        O contrato está em
+        `specs/013-socket-heartbeat/contracts/heartbeat_messages.md`.
+
+        >>> await self.answer_ping({"type": "ping", "payload": {"n": 1}})
+        """
+        if not self.passed_socket_gates():
+            return
+
+        await self.send_event(type=PONG, payload=pong_payload(content))
+
+    async def decode_client_frame(
+        self, text_data: str | None
+    ) -> dict[str, object] | None:
         """Decodifica o frame, e recusa em vez de derrubar o socket.
 
         O `receive` do Channels levanta com frame binário e com JSON inválido, e
         a exceção fecha a conexão. Um cliente com bug recebe a recusa e segue
-        conectado (feature 009, FR-023).
+        conectado (feature 009, FR-023). Devolve o objeto, ou `None` depois de
+        recusar.
+
+        >>> await self.decode_client_frame('{"type": "pass"}')
+        {'type': 'pass'}
         """
         if text_data is None:
             await self.send_refusal(
                 MALFORMED_MESSAGE, "expected a text frame, got binary"
             )
-            return
+            return None
 
         try:
             content = json.loads(text_data)
         except json.JSONDecodeError as error:
             await self.send_refusal(MALFORMED_MESSAGE, f"frame is not JSON: {error}")
-            return
+            return None
 
         if not isinstance(content, dict):
             await self.send_refusal(
                 MALFORMED_MESSAGE, f"frame is {content!r}: expected a JSON object"
             )
-            return
+            return None
 
-        await self.receive_json(content)
+        return content
 
     async def receive_json(self, content: dict[str, object], **kwargs: object) -> None:
         """Routes `{"type": "play_card", ...}` to `handle_play_card(payload)`.

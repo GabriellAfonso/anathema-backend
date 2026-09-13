@@ -124,6 +124,19 @@ class MatchConsumer(BaseConsumer):
             self.channel_name,
         )
 
+    def passed_socket_gates(self) -> bool:
+        """O gate da partida também precisa ter deixado o socket entrar.
+
+        Este gate recusa depois de o base aceitar o socket e pô-lo no grupo de
+        usuário, então `accepted` sozinho não basta. `match_id` é `None`
+        exatamente no socket recusado, como `on_disconnect` e `receive_json` já
+        assumem.
+
+        >>> self.passed_socket_gates()
+        True
+        """
+        return super().passed_socket_gates() and self.match_id is not None
+
     @classmethod
     def user_group(cls, user_id: int) -> str:
         """O grupo de usuário deste socket, na fórmula de `match_delivery`.
