@@ -39,3 +39,10 @@ fase errada chega ao motor e recebe a recusa dele.
 
 Ver [refusal_codes.md](./refusal_codes.md): `malformed_message` e
 `unknown_message_type`.
+
+## `ping` (feature 013)
+
+`{"type": "ping", "payload": {...}}` existe neste socket e **não é recusado**,
+em nenhuma fase. Não é jogada: não passa pelo parser desta tabela, não cria
+versão e não gera `match_update`. O servidor responde `pong` só a este socket.
+Ver [013 — heartbeat_messages.md](../../013-socket-heartbeat/contracts/heartbeat_messages.md).
