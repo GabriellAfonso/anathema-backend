@@ -88,7 +88,9 @@ def log_in(base: str, username: str) -> str:
     status, body = http(
         base, "POST", "/accounts/login/", {"username": username, "password": PASSWORD}
     )
-    expect(status == 200 and isinstance(body, dict), f"login {username}: {status} {body}")
+    expect(
+        status == 200 and isinstance(body, dict), f"login {username}: {status} {body}"
+    )
     assert isinstance(body, dict)
     return str(body["token"])
 
@@ -179,7 +181,9 @@ async def on_frame(bot: Bot, socket: websockets.ClientConnection, frame: Json) -
     raise SmokeFailure(f"{bot.label} recebeu frame inesperado: {frame}")
 
 
-async def on_state(bot: Bot, socket: websockets.ClientConnection, payload: Json) -> bool:
+async def on_state(
+    bot: Bot, socket: websockets.ClientConnection, payload: Json
+) -> bool:
     version = int(payload["version"])  # type: ignore[call-overload]
     if version <= bot.version:
         return True
@@ -196,7 +200,9 @@ async def on_state(bot: Bot, socket: websockets.ClientConnection, payload: Json)
     return True
 
 
-async def on_refusal(bot: Bot, socket: websockets.ClientConnection, payload: Json) -> bool:
+async def on_refusal(
+    bot: Bot, socket: websockets.ClientConnection, payload: Json
+) -> bool:
     line = f"{payload.get('code')}: {payload.get('error')}"
     bot.refusals.append(line)
     print(f"   x {bot.label} recusado -- {line}")
@@ -252,7 +258,11 @@ def action_candidates(bot: Bot, view: Json) -> Iterator[Candidate]:
     yield from spell_candidates(bot, you, opponent, declaration=False)
 
     bank = [unit["card"]["card_instance_id"] for unit in you["bank"]]
-    if view["token_holder_user_id"] == bot.user_id and not view["token_consumed"] and bank:
+    if (
+        view["token_holder_user_id"] == bot.user_id
+        and not view["token_consumed"]
+        and bank
+    ):
         yield "declare_attack", {"attacker_card_instance_ids": bank}
 
     for card in sorted(you["hand"], key=lambda c: bot.catalog[c["card_id"]]["energy"]):
@@ -320,7 +330,9 @@ def key_of(bot: Bot, candidate: Candidate) -> tuple[int, str, str]:
     return bot.version, candidate[0], json.dumps(candidate[1], sort_keys=True)
 
 
-async def send(bot: Bot, socket: websockets.ClientConnection, candidate: Candidate) -> None:
+async def send(
+    bot: Bot, socket: websockets.ClientConnection, candidate: Candidate
+) -> None:
     kind, payload = candidate
     bot.tried.add(key_of(bot, candidate))
     bot.sent[kind] += 1
@@ -417,10 +429,14 @@ async def run(base: str, options: argparse.Namespace) -> None:
         bots.append(bot)
     pick = spell_deck_id if options.spells else first_deck_id
     decks = [pick(base, bot.token) for bot in bots]
-    print(f"== contas criadas, catálogo com {len(bots[0].catalog)} cartas, decks {decks}")
+    print(
+        f"== contas criadas, catálogo com {len(bots[0].catalog)} cartas, decks {decks}"
+    )
 
     await asyncio.gather(*(find_match(bot, deck) for bot, deck in zip(bots, decks)))
-    expect(bots[0].match_id == bots[1].match_id, "os dois caíram em partidas diferentes")
+    expect(
+        bots[0].match_id == bots[1].match_id, "os dois caíram em partidas diferentes"
+    )
     print(f"== pareados na partida {bots[0].match_id}")
 
     started = time.monotonic()
@@ -446,8 +462,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", default="http://localhost:8000")
     parser.add_argument("--spells", action="store_true", help="deck com feitiços")
-    parser.add_argument("--stall", action="store_true", help="P2 deixa o relógio estourar")
-    parser.add_argument("--forfeit-at", type=int, default=0, help="desiste nesta rodada")
+    parser.add_argument(
+        "--stall", action="store_true", help="P2 deixa o relógio estourar"
+    )
+    parser.add_argument(
+        "--forfeit-at", type=int, default=0, help="desiste nesta rodada"
+    )
     options = parser.parse_args()
     try:
         asyncio.run(run(options.base, options))
