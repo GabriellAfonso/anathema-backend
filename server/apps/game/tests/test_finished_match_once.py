@@ -152,7 +152,10 @@ async def test_a_failing_recorder_does_not_stop_the_final_state(
 # --- Pelo banco: a unicidade resolve a corrida ------------------------------
 
 
-db = pytest.mark.django_db
+# `transaction=True`: o gravador escreve por `database_sync_to_async`, em outra
+# thread e outra conexão, e a transação que envolve o teste comum seguraria a
+# tabela -- o SQLite responde `database table is locked`.
+db = pytest.mark.django_db(transaction=True)
 
 
 def _a_player(nickname: str) -> PlayerProfile:
@@ -163,8 +166,13 @@ def _a_player(nickname: str) -> PlayerProfile:
     return profile
 
 
-def _finished_twin() -> tuple[Match, Match]:
-    """A partida antes e depois da desistência, com perfis de verdade."""
+@pytest.fixture
+def finished_twin() -> tuple[Match, Match]:
+    """A partida antes e depois da desistência, com perfis de verdade.
+
+    Fixture síncrona e não chamada de dentro do teste: o teste é `async`, e ali
+    o ORM síncrono levanta `SynchronousOnlyOperation`.
+    """
     one, two = _a_player("one").pk, _a_player("two").pk
     match = fake_match_in_action_phase(one, two)
     match.started_at = STARTED_AT
@@ -175,8 +183,10 @@ def _finished_twin() -> tuple[Match, Match]:
 
 
 @db
-async def test_recording_the_same_match_twice_writes_one_row() -> None:
-    before, match = _finished_twin()
+async def test_recording_the_same_match_twice_writes_one_row(
+    finished_twin: tuple[Match, Match],
+) -> None:
+    before, match = finished_twin
     finished = finished_match(before, match, ENDED_AT)
     assert finished is not None
     recorder = DatabaseFinishedMatchRecorder()
@@ -188,9 +198,11 @@ async def test_recording_the_same_match_twice_writes_one_row() -> None:
 
 
 @db
-async def test_the_losing_race_counts_no_second_victory() -> None:
+async def test_the_losing_race_counts_no_second_victory(
+    finished_twin: tuple[Match, Match],
+) -> None:
     """Perder a corrida não soma vitória, e não vira exceção."""
-    before, match = _finished_twin()
+    before, match = finished_twin
     finished = finished_match(before, match, ENDED_AT)
     assert finished is not None
     recorder = DatabaseFinishedMatchRecorder()
@@ -203,9 +215,11 @@ async def test_the_losing_race_counts_no_second_victory() -> None:
 
 
 @db
-async def test_two_concurrent_recordings_leave_one_row() -> None:
+async def test_two_concurrent_recordings_leave_one_row(
+    finished_twin: tuple[Match, Match],
+) -> None:
     """Os dois workers chegam ao registro da mesma partida ao mesmo tempo."""
-    before, match = _finished_twin()
+    before, match = finished_twin
     finished = finished_match(before, match, ENDED_AT)
     assert finished is not None
 
@@ -232,10 +246,10 @@ def refuse_to_bump_stats(
 
 @db
 async def test_a_failing_statistics_write_leaves_no_row(
-    monkeypatch: pytest.MonkeyPatch,
+    finished_twin: tuple[Match, Match], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Atômico: uma falha no meio não deixa vitória contada sem partida registrada."""
-    before, match = _finished_twin()
+    before, match = finished_twin
     finished = finished_match(before, match, ENDED_AT)
     assert finished is not None
     monkeypatch.setattr(recorder_module, "_bump_stats", refuse_to_bump_stats)

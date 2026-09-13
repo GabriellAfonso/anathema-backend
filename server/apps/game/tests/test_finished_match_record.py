@@ -3,6 +3,12 @@
 Estes tocam o banco (`django_db`), ao contrário dos testes de socket -- é aqui
 que a porta injetada é provada, e é por ela existir que a suíte de websocket
 continua fora do banco.
+
+`transaction=True` é obrigatório: o gravador escreve por
+`database_sync_to_async`, em outra thread e outra conexão. Com a transação que
+envolve o teste comum, ela segura a tabela e o SQLite responde
+`database table is locked`. E dentro de teste `async` o ORM só vai pela API
+`a*` -- a síncrona levanta `SynchronousOnlyOperation`.
 """
 
 from copy import deepcopy
@@ -24,7 +30,7 @@ STARTED_AT = EpochMillis(1_700_000_000_000)
 ENDED_AT = EpochMillis(1_700_000_742_000)
 DURATION_SECONDS = 742
 
-pytestmark = pytest.mark.django_db
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
 @pytest.fixture
@@ -54,15 +60,17 @@ def _a_player(nickname: str) -> PlayerProfile:
     return profile
 
 
-async def _record(match: Match, before: Match, ended_at: EpochMillis = ENDED_AT) -> bool:
+async def _record(
+    match: Match, before: Match, ended_at: EpochMillis = ENDED_AT
+) -> bool:
     finished = finished_match(before, match, ended_at)
     assert finished is not None
 
     return await DatabaseFinishedMatchRecorder().record(finished)
 
 
-def _stats_of(user_id: int) -> PlayerStats:
-    return PlayerStats.objects.get(profile_id=user_id)
+async def _stats_of(user_id: int) -> PlayerStats:
+    return await PlayerStats.objects.aget(profile_id=user_id)
 
 
 # --- A linha ----------------------------------------------------------------
@@ -157,8 +165,8 @@ async def test_both_players_get_a_match_played(
 
     await _record(match, before)
 
-    assert _stats_of(players[0]).matches_played == 1
-    assert _stats_of(players[1]).matches_played == 1
+    assert (await _stats_of(players[0])).matches_played == 1
+    assert (await _stats_of(players[1])).matches_played == 1
 
 
 async def test_the_win_and_the_loss_land_on_the_right_sides(
@@ -169,7 +177,7 @@ async def test_the_win_and_the_loss_land_on_the_right_sides(
 
     await _record(match, before)
 
-    winner, loser = _stats_of(players[1]), _stats_of(players[0])
+    winner, loser = await _stats_of(players[1]), await _stats_of(players[0])
     assert (winner.wins, winner.losses) == (1, 0)
     assert (loser.wins, loser.losses) == (0, 1)
 
@@ -182,14 +190,14 @@ async def test_the_duration_is_added_to_both_play_times(
 
     await _record(match, before)
 
-    assert _stats_of(players[0]).play_time == DURATION_SECONDS
-    assert _stats_of(players[1]).play_time == DURATION_SECONDS
+    assert (await _stats_of(players[0])).play_time == DURATION_SECONDS
+    assert (await _stats_of(players[1])).play_time == DURATION_SECONDS
 
 
 async def test_a_sixth_match_adds_one_without_recounting(
     players: tuple[int, int], match: Match
 ) -> None:
-    PlayerStats.objects.filter(profile_id=players[0]).update(
+    await PlayerStats.objects.filter(profile_id=players[0]).aupdate(
         matches_played=5, wins=3, losses=2, play_time=1000
     )
     before = deepcopy(match)
@@ -197,7 +205,7 @@ async def test_a_sixth_match_adds_one_without_recounting(
 
     await _record(match, before)
 
-    stats = _stats_of(players[0])
+    stats = await _stats_of(players[0])
     assert (stats.matches_played, stats.wins, stats.losses) == (6, 4, 2)
     assert stats.play_time == 1000 + DURATION_SECONDS
 
@@ -206,7 +214,7 @@ async def test_a_player_without_stats_does_not_stop_the_record(
     players: tuple[int, int], match: Match
 ) -> None:
     """Conta criada fora do registro não tem `PlayerStats`, e a partida aconteceu."""
-    PlayerStats.objects.filter(profile_id=players[1]).delete()
+    await PlayerStats.objects.filter(profile_id=players[1]).adelete()
     before = deepcopy(match)
 
     forfeit(match, players[0])
