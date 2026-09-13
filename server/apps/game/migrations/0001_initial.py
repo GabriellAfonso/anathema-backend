@@ -9,32 +9,69 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('players', '0002_playerdeck'),
+        ("players", "0002_playerdeck"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='MatchRecord',
+            name="MatchRecord",
             fields=[
-                ('match_id', models.CharField(max_length=64, primary_key=True, serialize=False)),
-                ('end_reason', models.CharField(choices=[('nexus_depleted', 'nexus_depleted'), ('forfeit', 'forfeit')], max_length=20)),
-                ('started_at', models.DateTimeField()),
-                ('ended_at', models.DateTimeField()),
-                ('duration_seconds', models.PositiveIntegerField()),
-                ('final_round', models.PositiveIntegerField()),
-                ('winner_final_nexus', models.IntegerField()),
-                ('loser_final_nexus', models.IntegerField()),
-                ('winner_deck_name', models.CharField(blank=True, max_length=50)),
-                ('loser_deck_name', models.CharField(blank=True, max_length=50)),
-                ('winner_deck_card_ids', models.JSONField(default=list)),
-                ('loser_deck_card_ids', models.JSONField(default=list)),
-                ('loser', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='matches_lost', to='players.playerprofile')),
-                ('winner', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='matches_won', to='players.playerprofile')),
+                (
+                    "match_id",
+                    models.CharField(max_length=64, primary_key=True, serialize=False),
+                ),
+                (
+                    "end_reason",
+                    models.CharField(
+                        choices=[
+                            ("nexus_depleted", "nexus_depleted"),
+                            ("forfeit", "forfeit"),
+                        ],
+                        max_length=20,
+                    ),
+                ),
+                ("started_at", models.DateTimeField()),
+                ("ended_at", models.DateTimeField()),
+                ("duration_seconds", models.PositiveIntegerField()),
+                ("final_round", models.PositiveIntegerField()),
+                ("winner_final_nexus", models.IntegerField()),
+                ("loser_final_nexus", models.IntegerField()),
+                ("winner_deck_name", models.CharField(blank=True, max_length=50)),
+                ("loser_deck_name", models.CharField(blank=True, max_length=50)),
+                ("winner_deck_card_ids", models.JSONField(default=list)),
+                ("loser_deck_card_ids", models.JSONField(default=list)),
+                (
+                    "loser",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="matches_lost",
+                        to="players.playerprofile",
+                    ),
+                ),
+                (
+                    "winner",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="matches_won",
+                        to="players.playerprofile",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Match Record',
-                'verbose_name_plural': 'Match Records',
-                'indexes': [models.Index(fields=['winner', '-ended_at'], name='game_matchr_winner__4f15b3_idx'), models.Index(fields=['loser', '-ended_at'], name='game_matchr_loser_i_254a4d_idx')],
+                "verbose_name": "Match Record",
+                "verbose_name_plural": "Match Records",
+                "indexes": [
+                    models.Index(
+                        fields=["winner", "-ended_at"],
+                        name="game_matchr_winner__4f15b3_idx",
+                    ),
+                    models.Index(
+                        fields=["loser", "-ended_at"],
+                        name="game_matchr_loser_i_254a4d_idx",
+                    ),
+                ],
             },
         ),
     ]

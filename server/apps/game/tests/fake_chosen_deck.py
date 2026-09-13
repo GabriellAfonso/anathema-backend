@@ -15,7 +15,9 @@ from apps.game.match import ChosenDeck
 FAKE_DECK_NAME = "Fake Deck"
 
 
-def fake_chosen_deck(deck: Deck | None = None, name: str = FAKE_DECK_NAME) -> ChosenDeck:
+def fake_chosen_deck(
+    deck: Deck | None = None, name: str = FAKE_DECK_NAME
+) -> ChosenDeck:
     """Um deck escolhido, com o de andaime do MVP quando nada é passado.
 
     >>> len(fake_chosen_deck().card_ids)

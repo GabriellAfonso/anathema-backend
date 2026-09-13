@@ -326,12 +326,8 @@ def test_deleting_a_deck_does_not_touch_a_match_in_progress(
 
     card_ids = [CardId(card_id) for card_id in deck.card_ids]
     match = start_match(
-        MatchEntry(
-            profile=fake_player_data(7, "one"), deck=fake_chosen_deck(card_ids)
-        ),
-        MatchEntry(
-            profile=fake_player_data(9, "two"), deck=fake_chosen_deck(card_ids)
-        ),
+        MatchEntry(profile=fake_player_data(7, "one"), deck=fake_chosen_deck(card_ids)),
+        MatchEntry(profile=fake_player_data(9, "two"), deck=fake_chosen_deck(card_ids)),
         catalog=get_card_catalog(),
         randomness=SeededRandomSource(),
         seed=new_random_seed(),
