@@ -12,6 +12,7 @@ saem as respostas que ele precisa:
   jogador, montado para ele
 - `refusal_codes` -- toda recusa vira um código estável
 - `matchmaking_refusals` -- os códigos do socket de matchmaking (feature 011)
+- `heartbeat` -- o ping dos dois sockets, que não é jogada (feature 013)
 
 `__all__` é explícito porque `mypy.ini` roda com `strict`, que liga
 `no_implicit_reexport`.
@@ -30,6 +31,7 @@ from .clock_events import (
 )
 from .client_messages import MalformedMessageError, parse_client_message
 from .commands import ClientCommand, ForfeitCommand, MulliganCommand, apply_command
+from .heartbeat import PING, PONG, is_ping, pong_payload
 from .match_changes import ClockChange, PlayerChange, RecordedChange, TurnWarningMark
 from .match_events import (
     ChangeOrigin,
@@ -131,4 +133,9 @@ __all__ = [
     "INVALID_DECK",
     "CONCURRENT_MATCH_WRITE",
     "INTERNAL_ERROR",
+    # Heartbeat dos dois sockets (feature 013)
+    "PING",
+    "PONG",
+    "is_ping",
+    "pong_payload",
 ]

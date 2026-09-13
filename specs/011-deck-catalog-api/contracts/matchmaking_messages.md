@@ -131,3 +131,10 @@ Fechar o socket tira o jogador da fila, e o deck da entrada sai junto.
 - O gate de autenticação e o close code `4001`.
 - O `match_found`, e o cliente abrindo `ws/match/` em seguida.
 - Todo o protocolo do socket de partida (feature 009) e o relógio (feature 010).
+
+## `ping` (feature 013)
+
+`{"type": "ping", "payload": {...}}` existe neste socket e **não é recusado**:
+antes do `join_queue`, na fila, depois de uma recusa e depois do `match_found`.
+Não mexe na fila nem consulta deck. O servidor responde `pong` só a este socket.
+Ver [013 — heartbeat_messages.md](../../013-socket-heartbeat/contracts/heartbeat_messages.md).

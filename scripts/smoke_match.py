@@ -28,6 +28,8 @@ from dataclasses import dataclass, field
 
 import websockets
 
+import smoke_heartbeat as heartbeat
+
 ROUND_CAP = 30
 MATCH_TIMEOUT_S = 600
 REFUSAL_LIMIT = 20
@@ -88,7 +90,9 @@ def log_in(base: str, username: str) -> str:
     status, body = http(
         base, "POST", "/accounts/login/", {"username": username, "password": PASSWORD}
     )
-    expect(status == 200 and isinstance(body, dict), f"login {username}: {status} {body}")
+    expect(
+        status == 200 and isinstance(body, dict), f"login {username}: {status} {body}"
+    )
     assert isinstance(body, dict)
     return str(body["token"])
 
@@ -138,15 +142,20 @@ class Bot:
     stall_pending: bool = False
     # --forfeit-at: desiste ao chegar nesta rodada com a vez na mão.
     forfeit_round: int = ROUND_CAP + 1
+    ledger: heartbeat.HeartbeatLedger = field(default_factory=heartbeat.HeartbeatLedger)
 
 
 async def find_match(bot: Bot, deck_id: int) -> None:
     url = f"{bot.ws_base}/ws/matchmaking/?token={bot.token}"
     async with websockets.connect(url) as socket:
+        await socket.send(heartbeat.ping_frame(bot.ledger))
         join = {"type": "join_queue", "payload": {"deck_id": deck_id}}
         await socket.send(json.dumps(join))
         while True:
             frame = json.loads(await socket.recv())
+            if frame["type"] == "pong":
+                heartbeat.record_pong(bot.ledger, frame["payload"])
+                continue
             if frame["type"] == "match_found":
                 payload = frame["payload"]
                 bot.user_id = payload["self"]["user_id"]
@@ -171,6 +180,9 @@ async def on_frame(bot: Bot, socket: websockets.ClientConnection, frame: Json) -
 
     if kind in ("match_start", "match_update"):
         return await on_state(bot, socket, payload)
+    if kind == "pong":
+        heartbeat.record_pong(bot.ledger, payload)
+        return bot.outcome is None or heartbeat.awaits_pongs(bot.ledger)
     if kind == "message_refused":
         return await on_refusal(bot, socket, payload)
     if kind == "turn_warning":
@@ -179,7 +191,9 @@ async def on_frame(bot: Bot, socket: websockets.ClientConnection, frame: Json) -
     raise SmokeFailure(f"{bot.label} recebeu frame inesperado: {frame}")
 
 
-async def on_state(bot: Bot, socket: websockets.ClientConnection, payload: Json) -> bool:
+async def on_state(
+    bot: Bot, socket: websockets.ClientConnection, payload: Json
+) -> bool:
     version = int(payload["version"])  # type: ignore[call-overload]
     if version <= bot.version:
         return True
@@ -187,19 +201,24 @@ async def on_state(bot: Bot, socket: websockets.ClientConnection, payload: Json)
     bot.version = version
     bot.view = payload["view"]  # type: ignore[assignment]
     narrate(bot, payload.get("events") or [])
+    for ping in heartbeat.phase_ping_frames(bot.ledger, str(bot.view["phase"])):
+        await socket.send(ping)
 
     if bot.view["phase"] == "finished":
         bot.outcome = bot.view["outcome"]  # type: ignore[assignment]
-        return False
+        return heartbeat.awaits_pongs(bot.ledger)
 
     await act(bot, socket)
     return True
 
 
-async def on_refusal(bot: Bot, socket: websockets.ClientConnection, payload: Json) -> bool:
+async def on_refusal(
+    bot: Bot, socket: websockets.ClientConnection, payload: Json
+) -> bool:
     line = f"{payload.get('code')}: {payload.get('error')}"
     bot.refusals.append(line)
     print(f"   x {bot.label} recusado -- {line}")
+    expect(payload.get("code") != "unknown_message_type", f"{bot.label}: {line}")
     expect(len(bot.refusals) <= REFUSAL_LIMIT, f"{bot.label} recusado demais")
     await act(bot, socket)
     return True
@@ -252,7 +271,11 @@ def action_candidates(bot: Bot, view: Json) -> Iterator[Candidate]:
     yield from spell_candidates(bot, you, opponent, declaration=False)
 
     bank = [unit["card"]["card_instance_id"] for unit in you["bank"]]
-    if view["token_holder_user_id"] == bot.user_id and not view["token_consumed"] and bank:
+    if (
+        view["token_holder_user_id"] == bot.user_id
+        and not view["token_consumed"]
+        and bank
+    ):
         yield "declare_attack", {"attacker_card_instance_ids": bank}
 
     for card in sorted(you["hand"], key=lambda c: bot.catalog[c["card_id"]]["energy"]):
@@ -320,7 +343,9 @@ def key_of(bot: Bot, candidate: Candidate) -> tuple[int, str, str]:
     return bot.version, candidate[0], json.dumps(candidate[1], sort_keys=True)
 
 
-async def send(bot: Bot, socket: websockets.ClientConnection, candidate: Candidate) -> None:
+async def send(
+    bot: Bot, socket: websockets.ClientConnection, candidate: Candidate
+) -> None:
     kind, payload = candidate
     bot.tried.add(key_of(bot, candidate))
     bot.sent[kind] += 1
@@ -417,10 +442,14 @@ async def run(base: str, options: argparse.Namespace) -> None:
         bots.append(bot)
     pick = spell_deck_id if options.spells else first_deck_id
     decks = [pick(base, bot.token) for bot in bots]
-    print(f"== contas criadas, catálogo com {len(bots[0].catalog)} cartas, decks {decks}")
+    print(
+        f"== contas criadas, catálogo com {len(bots[0].catalog)} cartas, decks {decks}"
+    )
 
     await asyncio.gather(*(find_match(bot, deck) for bot, deck in zip(bots, decks)))
-    expect(bots[0].match_id == bots[1].match_id, "os dois caíram em partidas diferentes")
+    expect(
+        bots[0].match_id == bots[1].match_id, "os dois caíram em partidas diferentes"
+    )
     print(f"== pareados na partida {bots[0].match_id}")
 
     started = time.monotonic()
@@ -438,16 +467,24 @@ def report(bots: list[Bot], seconds: float) -> None:
     assert isinstance(outcome, dict)
     loser = bots[0].names.get(outcome["defeated_user_id"])  # type: ignore[call-overload]
     print(f"== fim em {seconds:.1f}s: perdeu {loser}, motivo {outcome['reason']}")
+    problems: list[str] = []
     for bot in bots:
         print(f"   {bot.label} mandou {dict(bot.sent)}, recusas {len(bot.refusals)}")
+        print(f"   {bot.label} heartbeat: {heartbeat.heartbeat_summary(bot.ledger)}")
+        problems += heartbeat.heartbeat_problems(bot.ledger, bot.label)
+    expect(not problems, "; ".join(problems))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", default="http://localhost:8000")
     parser.add_argument("--spells", action="store_true", help="deck com feitiços")
-    parser.add_argument("--stall", action="store_true", help="P2 deixa o relógio estourar")
-    parser.add_argument("--forfeit-at", type=int, default=0, help="desiste nesta rodada")
+    parser.add_argument(
+        "--stall", action="store_true", help="P2 deixa o relógio estourar"
+    )
+    parser.add_argument(
+        "--forfeit-at", type=int, default=0, help="desiste nesta rodada"
+    )
     options = parser.parse_args()
     try:
         asyncio.run(run(options.base, options))
