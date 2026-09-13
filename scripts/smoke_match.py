@@ -28,6 +28,8 @@ from dataclasses import dataclass, field
 
 import websockets
 
+import smoke_heartbeat as heartbeat
+
 ROUND_CAP = 30
 MATCH_TIMEOUT_S = 600
 REFUSAL_LIMIT = 20
@@ -140,15 +142,20 @@ class Bot:
     stall_pending: bool = False
     # --forfeit-at: desiste ao chegar nesta rodada com a vez na mão.
     forfeit_round: int = ROUND_CAP + 1
+    ledger: heartbeat.HeartbeatLedger = field(default_factory=heartbeat.HeartbeatLedger)
 
 
 async def find_match(bot: Bot, deck_id: int) -> None:
     url = f"{bot.ws_base}/ws/matchmaking/?token={bot.token}"
     async with websockets.connect(url) as socket:
+        await socket.send(heartbeat.ping_frame(bot.ledger))
         join = {"type": "join_queue", "payload": {"deck_id": deck_id}}
         await socket.send(json.dumps(join))
         while True:
             frame = json.loads(await socket.recv())
+            if frame["type"] == "pong":
+                heartbeat.record_pong(bot.ledger, frame["payload"])
+                continue
             if frame["type"] == "match_found":
                 payload = frame["payload"]
                 bot.user_id = payload["self"]["user_id"]
@@ -173,6 +180,9 @@ async def on_frame(bot: Bot, socket: websockets.ClientConnection, frame: Json) -
 
     if kind in ("match_start", "match_update"):
         return await on_state(bot, socket, payload)
+    if kind == "pong":
+        heartbeat.record_pong(bot.ledger, payload)
+        return bot.outcome is None or heartbeat.awaits_pongs(bot.ledger)
     if kind == "message_refused":
         return await on_refusal(bot, socket, payload)
     if kind == "turn_warning":
@@ -191,10 +201,12 @@ async def on_state(
     bot.version = version
     bot.view = payload["view"]  # type: ignore[assignment]
     narrate(bot, payload.get("events") or [])
+    for ping in heartbeat.phase_ping_frames(bot.ledger, str(bot.view["phase"])):
+        await socket.send(ping)
 
     if bot.view["phase"] == "finished":
         bot.outcome = bot.view["outcome"]  # type: ignore[assignment]
-        return False
+        return heartbeat.awaits_pongs(bot.ledger)
 
     await act(bot, socket)
     return True
@@ -206,6 +218,7 @@ async def on_refusal(
     line = f"{payload.get('code')}: {payload.get('error')}"
     bot.refusals.append(line)
     print(f"   x {bot.label} recusado -- {line}")
+    expect(payload.get("code") != "unknown_message_type", f"{bot.label}: {line}")
     expect(len(bot.refusals) <= REFUSAL_LIMIT, f"{bot.label} recusado demais")
     await act(bot, socket)
     return True
@@ -454,8 +467,12 @@ def report(bots: list[Bot], seconds: float) -> None:
     assert isinstance(outcome, dict)
     loser = bots[0].names.get(outcome["defeated_user_id"])  # type: ignore[call-overload]
     print(f"== fim em {seconds:.1f}s: perdeu {loser}, motivo {outcome['reason']}")
+    problems: list[str] = []
     for bot in bots:
         print(f"   {bot.label} mandou {dict(bot.sent)}, recusas {len(bot.refusals)}")
+        print(f"   {bot.label} heartbeat: {heartbeat.heartbeat_summary(bot.ledger)}")
+        problems += heartbeat.heartbeat_problems(bot.ledger, bot.label)
+    expect(not problems, "; ".join(problems))
 
 
 def main() -> None:
